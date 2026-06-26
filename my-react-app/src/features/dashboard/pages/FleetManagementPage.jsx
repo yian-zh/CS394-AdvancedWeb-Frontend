@@ -38,9 +38,7 @@ const INITIAL_REPAIRS = [
   }
 ];
 
-const FleetManagementPage = ({ user, onSignOut }) => {
-  const [fleet, setFleet] = useState(INITIAL_FLEET);
-  const [repairs, setRepairs] = useState(INITIAL_REPAIRS);
+const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRepairs }) => {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Modals state
@@ -318,7 +316,12 @@ const FleetManagementPage = ({ user, onSignOut }) => {
             <h2 className="active-fleet-title">Active Fleet Status</h2>
             <div className="fleet-cards-grid">
               {fleet.map((bus) => (
-                <div key={bus.id} className="bus-card">
+                <Link 
+                  key={bus.id} 
+                  to={`/fleet/${encodeURIComponent(bus.id)}`} 
+                  className="bus-card"
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
                   <div className="bus-card-header">
                     <span className="bus-card-id">
                       <Bus size={18} />
@@ -350,18 +353,13 @@ const FleetManagementPage = ({ user, onSignOut }) => {
                     )}
                   </div>
 
-                  <button 
-                    type="button" 
-                    className="bus-card-link"
-                    onClick={() => {
-                      // If bus is in maintenance, filter table to show it, else alert
-                      setSearchQuery(bus.id);
-                    }}
-                  >
-                    <Wrench size={14} />
-                    View Maintenance Log
-                  </button>
-                </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginTop: '4px' }}>
+                    <span className="bus-card-link">
+                      <Bus size={14} />
+                      View Details →
+                    </span>
+                  </div>
+                </Link>
               ))}
             </div>
           </div>

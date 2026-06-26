@@ -3,10 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AuthPage from './features/auth/pages/AuthPage';
 import UserManagementPage from './features/dashboard/pages/UserManagementPage';
 import FleetManagementPage from './features/dashboard/pages/FleetManagementPage';
+import BusDetailPage from './features/dashboard/pages/BusDetailPage';
 import ProtectedRoute from './components/ProtectedRoute';
+import { INITIAL_FLEET, INITIAL_REPAIRS } from './features/dashboard/data/fleetData';
 
 function App() {
   const [user, setUser] = useState(null);
+  const [fleet, setFleet] = useState(INITIAL_FLEET);
+  const [repairs, setRepairs] = useState(INITIAL_REPAIRS);
 
   return (
     <BrowserRouter>
@@ -37,7 +41,31 @@ function App() {
           path="/fleet" 
           element={
             <ProtectedRoute user={user}>
-              <FleetManagementPage user={user} onSignOut={() => setUser(null)} />
+              <FleetManagementPage 
+                user={user} 
+                onSignOut={() => setUser(null)} 
+                fleet={fleet}
+                setFleet={setFleet}
+                repairs={repairs}
+                setRepairs={setRepairs}
+              />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Bus Details Page (Protected) */}
+        <Route 
+          path="/fleet/:busId" 
+          element={
+            <ProtectedRoute user={user}>
+              <BusDetailPage 
+                user={user} 
+                onSignOut={() => setUser(null)} 
+                fleet={fleet}
+                setFleet={setFleet}
+                repairs={repairs}
+                setRepairs={setRepairs}
+              />
             </ProtectedRoute>
           } 
         />
