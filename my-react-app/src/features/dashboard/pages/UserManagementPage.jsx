@@ -198,10 +198,10 @@ const UserManagementPage = ({ user, onSignOut }) => {
             <Bus size={18} />
             Fleet & Maintenance
           </Link>
-          <button type="button" className="sidebar-link">
+          <Link to="/logistics" className="sidebar-link">
             <MapPin size={18} />
             Route Logistics
-          </button>
+          </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />
             Settings

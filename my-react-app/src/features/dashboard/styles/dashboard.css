@@ -1146,4 +1146,53 @@
   opacity: 1;
 }
 
+/* --- Route Logistics Planner Styles --- */
+.stop-card {
+  transition: all 0.2s ease-in-out;
+}
 
+.stop-card:hover {
+  border-color: var(--primary-brand) !important;
+  background-color: rgba(0, 35, 111, 0.01) !important;
+  transform: translateX(2px);
+}
+
+.insert-stop-connector-btn:hover {
+  transform: absolute scale(1.15) !important;
+  background-color: var(--primary-brand) !important;
+  color: #ffffff !important;
+  border-color: var(--primary-brand) !important;
+}
+
+.driver-row-hover {
+  transition: all 0.2s ease;
+}
+
+.driver-row-hover:hover {
+  border-color: var(--primary-brand) !important;
+  box-shadow: 0 4px 10px rgba(0, 35, 111, 0.05);
+  background-color: rgba(0, 35, 111, 0.01) !important;
+}
+
+.driver-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 99px;
+  display: inline-flex;
+}
+
+.driver-badge-available {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.driver-badge-assigned {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.driver-badge-leave {
+  background-color: #fee2e2;
+  color: #dc2626;
+}

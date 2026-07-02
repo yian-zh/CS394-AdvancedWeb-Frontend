@@ -4,6 +4,7 @@ import AuthPage from './features/auth/pages/AuthPage';
 import UserManagementPage from './features/dashboard/pages/UserManagementPage';
 import FleetManagementPage from './features/dashboard/pages/FleetManagementPage';
 import BusDetailPage from './features/dashboard/pages/BusDetailPage';
+import RouteLogisticsPage from './features/dashboard/pages/RouteLogisticsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { INITIAL_FLEET, INITIAL_REPAIRS } from './features/dashboard/data/fleetData';
 
@@ -65,6 +66,21 @@ function App() {
                 setFleet={setFleet}
                 repairs={repairs}
                 setRepairs={setRepairs}
+              />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Route Logistics Planner (Protected) */}
+        <Route 
+          path="/logistics" 
+          element={
+            <ProtectedRoute user={user}>
+              <RouteLogisticsPage 
+                user={user} 
+                onSignOut={() => setUser(null)} 
+                fleet={fleet}
+                setFleet={setFleet}
               />
             </ProtectedRoute>
           } 
