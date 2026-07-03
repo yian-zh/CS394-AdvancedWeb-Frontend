@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, MapPin, 
-  GraduationCap, Check, X, ArrowLeft, User
+  GraduationCap, Check, X, ArrowLeft, User, Trash2, GripVertical
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -36,6 +36,9 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
   const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
+  const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
+  const [stopToDelete, setStopToDelete] = useState(null);
+  const [draggedIndex, setDraggedIndex] = useState(null);
 
   // Modal form states
   const [newStopName, setNewStopName] = useState('');
@@ -123,6 +126,44 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
     setNewStudentName('');
     setSelectedStudentStopId('');
     setIsStudentModalOpen(false);
+  };
+
+  const handleDeleteStop = () => {
+    if (!stopToDelete) return;
+    const stopId = stopToDelete.id;
+    const updatedStops = stops.filter(s => s.id !== stopId);
+    setStops(updatedStops);
+    if (selectedStopId === stopId) {
+      if (updatedStops.length > 0) {
+        setSelectedStopId(updatedStops[0].id);
+      } else {
+        setSelectedStopId(null);
+      }
+    }
+    setStopToDelete(null);
+    setIsDeleteConfirmModalOpen(false);
+  };
+
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    if (stops[draggedIndex].type === 'arrival' || stops[index].type === 'arrival') return;
+
+    const updatedStops = [...stops];
+    const temp = updatedStops[draggedIndex];
+    updatedStops.splice(draggedIndex, 1);
+    updatedStops.splice(index, 0, temp);
+    setDraggedIndex(index);
+    setStops(updatedStops);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
   };
 
   const openInsertStopModal = (index) => {
@@ -290,20 +331,17 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
 
                   return (
                     <div key={stop.id} style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                      {/* Connector Line (above card, except first stop) */}
+                      {/* Connector Plus Icon (above card, except first stop) */}
                       {index > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', position: 'relative', margin: '4px 0 4px 18px', height: '24px' }}>
-                          <div style={{ position: 'absolute', top: '-8px', bottom: '-8px', left: '0', borderLeft: '2px dashed #94a3b8', width: '1px' }}></div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '8px 0' }}>
                           <button 
                             type="button"
                             className="insert-stop-connector-btn"
                             onClick={() => openInsertStopModal(index)}
                             title="Insert Stop Here"
                             style={{
-                              position: 'absolute',
-                              left: '-10px',
-                              width: '22px',
-                              height: '22px',
+                              width: '24px',
+                              height: '24px',
                               borderRadius: '50%',
                               backgroundColor: '#ffffff',
                               border: '1px solid #cbd5e1',
@@ -319,7 +357,7 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
                               transition: 'all 0.2s'
                             }}
                           >
-                            <Plus size={10} strokeWidth={3} />
+                            <Plus size={12} strokeWidth={3} />
                           </button>
                         </div>
                       )}
@@ -328,6 +366,10 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
                       <div 
                         onClick={() => setSelectedStopId(stop.id)}
                         className={`stop-card ${isSelected ? 'is-selected' : ''}`}
+                        draggable={!isArrival}
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={(e) => handleDragOver(e, index)}
+                        onDragEnd={handleDragEnd}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -336,12 +378,19 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
                           borderRadius: '10px',
                           border: isSelected ? '2px solid var(--primary-brand)' : '1px solid rgba(197, 197, 211, 0.3)',
                           backgroundColor: isSelected ? 'rgba(0, 35, 111, 0.02)' : '#ffffff',
-                          cursor: 'pointer',
+                          cursor: isArrival ? 'pointer' : (draggedIndex === index ? 'grabbing' : 'grab'),
                           transition: 'all 0.2s',
                           textAlign: 'left',
-                          boxShadow: isSelected ? '0 4px 12px rgba(0, 35, 111, 0.05)' : 'none'
+                          boxShadow: isSelected ? '0 4px 12px rgba(0, 35, 111, 0.05)' : 'none',
+                          opacity: draggedIndex === index ? 0.4 : 1
                         }}
                       >
+                        {/* Drag Handle Indicator */}
+                        {!isArrival && (
+                          <div style={{ color: 'var(--icon-color)', display: 'flex', alignItems: 'center', cursor: 'grab', marginRight: '-4px' }}>
+                            <GripVertical size={16} />
+                          </div>
+                        )}
                         {/* Index Indicator Circle */}
                         <div 
                           className="stop-index-circle"
@@ -376,6 +425,33 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
                           <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: '10px', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
                             ARRIVAL
                           </span>
+                        )}
+
+                        {!isArrival && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStopToDelete(stop);
+                              setIsDeleteConfirmModalOpen(true);
+                            }}
+                            className="delete-stop-btn"
+                            title="Delete Stop"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              padding: '8px',
+                              borderRadius: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         )}
                       </div>
                     </div>
@@ -652,6 +728,56 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
               </Button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* --- Delete Confirmation Modal --- */}
+      {isDeleteConfirmModalOpen && stopToDelete && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2>Confirm Deletion</h2>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => {
+                  setIsDeleteConfirmModalOpen(false);
+                  setStopToDelete(null);
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px', textAlign: 'left' }}>
+              <p style={{ fontSize: '14px', color: 'var(--text-dark)', margin: 0, lineHeight: 1.5 }}>
+                Are you sure you want to remove <strong>{stopToDelete.name}</strong> from the stop sequence of Route 1?
+              </p>
+              <p style={{ fontSize: '12px', color: '#ef4444', margin: '8px 0 0 0', fontWeight: 500 }}>
+                This action will update the routing coordinates and passenger stops list.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ backgroundColor: '#fafbfc' }}>
+              <Button 
+                type="button" 
+                variant="secondary" 
+                onClick={() => {
+                  setIsDeleteConfirmModalOpen(false);
+                  setStopToDelete(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleDeleteStop}
+                style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
+              >
+                Remove Stop
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

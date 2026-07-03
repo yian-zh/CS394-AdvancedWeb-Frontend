@@ -1196,3 +1196,13 @@
   background-color: #fee2e2;
   color: #dc2626;
 }
+
+.delete-stop-btn {
+  transition: all 0.2s ease;
+}
+
+.delete-stop-btn:hover {
+  background-color: #fee2e2 !important;
+  color: #dc2626 !important;
+}
+
