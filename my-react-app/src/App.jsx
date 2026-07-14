@@ -5,25 +5,44 @@ import UserManagementPage from './features/dashboard/pages/UserManagementPage';
 import FleetManagementPage from './features/dashboard/pages/FleetManagementPage';
 import BusDetailPage from './features/dashboard/pages/BusDetailPage';
 import RouteLogisticsPage from './features/dashboard/pages/RouteLogisticsPage';
+import RouteDetailPage from './features/dashboard/pages/RouteDetailPage';
+import StudentsPage from './features/dashboard/pages/StudentsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { INITIAL_FLEET, INITIAL_REPAIRS } from './features/dashboard/data/fleetData';
+import { INITIAL_STUDENTS } from './features/dashboard/data/studentsData';
 
 function App() {
   const [user, setUser] = useState(null);
   const [fleet, setFleet] = useState(INITIAL_FLEET);
   const [repairs, setRepairs] = useState(INITIAL_REPAIRS);
+  const [students, setStudents] = useState(INITIAL_STUDENTS);
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* Main index redirecting to users directory */}
-        <Route path="/" element={<Navigate to="/users" replace />} />
+        {/* Main index redirecting to students directory */}
+        <Route path="/" element={<Navigate to="/students" replace />} />
 
         {/* Auth Route */}
         <Route 
           path="/login" 
           element={
-            user ? <Navigate to="/users" replace /> : <AuthPage onLogin={setUser} />
+            user ? <Navigate to="/students" replace /> : <AuthPage onLogin={setUser} />
+          } 
+        />
+
+        {/* Student Management Hub (Protected) */}
+        <Route 
+          path="/students" 
+          element={
+            <ProtectedRoute user={user}>
+              <StudentsPage 
+                user={user} 
+                onSignOut={() => setUser(null)} 
+                students={students}
+                setStudents={setStudents}
+              />
+            </ProtectedRoute>
           } 
         />
 
@@ -36,6 +55,7 @@ function App() {
             </ProtectedRoute>
           } 
         />
+
 
         {/* Fleet & Maintenance Hub (Protected) */}
         <Route 
@@ -71,12 +91,25 @@ function App() {
           } 
         />
 
-        {/* Route Logistics Planner (Protected) */}
+        {/* Route Directory (Protected) */}
         <Route 
           path="/logistics" 
           element={
             <ProtectedRoute user={user}>
               <RouteLogisticsPage 
+                user={user} 
+                onSignOut={() => setUser(null)} 
+              />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Route Detail Planner (Protected) */}
+        <Route 
+          path="/logistics/:routeId" 
+          element={
+            <ProtectedRoute user={user}>
+              <RouteDetailPage 
                 user={user} 
                 onSignOut={() => setUser(null)} 
                 fleet={fleet}

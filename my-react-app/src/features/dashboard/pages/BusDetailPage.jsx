@@ -4,7 +4,7 @@ import {
   Bus, Users, LogOut, Search, ChevronLeft, Wrench, Calendar, 
   AlertTriangle, MapPin, SlidersHorizontal, Download, FileText, 
   FileCheck, Edit, ArrowLeft, ArrowUpRight, Gauge, Milestone,
-  Camera, Plus
+  Camera, Plus, GraduationCap
 } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
@@ -155,10 +155,10 @@ const BusDetailPage = ({ user, onSignOut, fleet, setFleet, repairs, setRepairs }
         </div>
 
         <nav className="sidebar-nav">
-          <button type="button" className="sidebar-link">
-            <Users size={18} />
+          <Link to="/students" className="sidebar-link">
+            <GraduationCap size={18} />
             Students
-          </button>
+          </Link>
           <Link to="/users" className="sidebar-link">
             <Users size={18} />
             User Management

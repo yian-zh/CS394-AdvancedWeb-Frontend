@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, MapPin, CloudUpload
+  SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, MapPin, CloudUpload,
+  GraduationCap
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -186,10 +187,10 @@ const UserManagementPage = ({ user, onSignOut }) => {
         </div>
 
         <nav className="sidebar-nav">
-          <button type="button" className="sidebar-link">
-            <Users size={18} />
+          <Link to="/students" className="sidebar-link">
+            <GraduationCap size={18} />
             Students
-          </button>
+          </Link>
           <Link to="/users" className="sidebar-link is-active">
             <Users size={18} />
             User Management

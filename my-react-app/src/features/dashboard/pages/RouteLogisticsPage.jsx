@@ -1,174 +1,120 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, Download, ChevronLeft, MapPin, 
-  GraduationCap, Check, X, ArrowLeft, User, Trash2, GripVertical
+  SlidersHorizontal, ChevronLeft, ChevronRight, X, MapPin, 
+  GraduationCap, ArrowRight, Clock
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
 import '../styles/dashboard.css';
 
-const INITIAL_STOPS = [
-  { id: 1, name: 'Wat Phnom', address: 'Preah Norodom Blvd', type: 'stop' },
-  { id: 2, name: 'Central Market (Phsar Thmey)', address: 'Calmette St', type: 'stop' },
-  { id: 3, name: 'Independence Monument', address: 'Sihanouk Blvd', type: 'stop' },
-  { id: 4, name: 'Diamond Island (Koh Pich)', address: 'Tonle Bassac', type: 'stop' },
-  { id: 5, name: 'Aeon Mall Phnom Penh', address: 'Sothearos Blvd', type: 'stop' },
-  { id: 6, name: 'Royal University of Phnom Penh', address: 'Russian Blvd', type: 'arrival' }
+const INITIAL_ROUTES = [
+  { 
+    id: 'route-42', 
+    name: 'Route 42 - North Campus', 
+    status: 'Active', 
+    detail: 'Mornings & Afternoons',
+    driver: 'Marcus Sterling', 
+    driverInitials: 'MS',
+    busId: '#402', 
+    timeWindow: '06:45 AM - 08:15 AM', 
+    stopsCount: 14, 
+    capacityUsed: 32, 
+    capacityTotal: 45 
+  },
+  { 
+    id: 'route-12', 
+    name: 'Route 12 - South District', 
+    status: 'Delayed', 
+    detail: 'Traffic: 12 min delay',
+    driver: 'Elena Rodriguez', 
+    driverInitials: 'ER',
+    busId: '#108', 
+    timeWindow: '07:15 AM - 08:30 AM', 
+    stopsCount: 22, 
+    capacityUsed: 48, 
+    capacityTotal: 52 
+  },
+  { 
+    id: 'route-31', 
+    name: 'Route 31 - Central Special Ed', 
+    status: 'Active', 
+    detail: 'Specialized Equipment Required',
+    driver: 'David Vance', 
+    driverInitials: 'DV',
+    busId: '#S-14', 
+    timeWindow: '07:00 AM - 08:30 AM', 
+    stopsCount: 11, 
+    capacityUsed: 14, 
+    capacityTotal: 15 
+  },
+  { 
+    id: 'route-1', 
+    name: 'Route 1 - Phnom Penh Central', 
+    status: 'Active', 
+    detail: 'Mornings & Afternoons',
+    driver: 'Sarah Jenkins', 
+    driverInitials: 'SJ',
+    busId: '#402-A', 
+    timeWindow: '06:30 AM - 08:00 AM', 
+    stopsCount: 6, 
+    capacityUsed: 45, 
+    capacityTotal: 60 
+  }
 ];
 
-const INITIAL_DRIVERS = [
-  { id: 'Robert Miller', number: '#8829', license: 'Class A CDL', expiry: '10/24', status: 'Available', avatar: 'RM' },
-  { id: 'Sarah Jenkins', number: '#7741', license: 'Class B CDL', expiry: '12/25', status: 'Assigned', avatar: 'SJ' },
-  { id: 'David Chen', number: '#9012', license: 'Class A CDL', expiry: '05/26', status: 'On Leave', avatar: 'DC' }
-];
+const RouteLogisticsPage = ({ user, onSignOut }) => {
+  const [routes, setRoutes] = useState(INITIAL_ROUTES);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All'); // All | Active | Delayed
+  
+  // Modals state
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
-const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
-  const [stops, setStops] = useState(INITIAL_STOPS);
-  const [selectedStopId, setSelectedStopId] = useState(4); // Default to stop 4 matching Figma design
-  const [activeDriver, setActiveDriver] = useState('J. Smith');
-  const [capacityUsed, setCapacityUsed] = useState(45);
-  const [capacityTotal, setCapacityTotal] = useState(60);
+  // New Route Form State
+  const [newRouteName, setNewRouteName] = useState('');
+  const [newDriverName, setNewDriverName] = useState('');
+  const [newBusId, setNewBusId] = useState('');
+  const [newTimeWindow, setNewTimeWindow] = useState('07:00 AM - 08:30 AM');
+  const [newStopsCount, setNewStopsCount] = useState(10);
+  const [newCapacityTotal, setNewCapacityTotal] = useState(60);
+  const [newDetail, setNewDetail] = useState('Mornings & Afternoons');
 
-  // Modal triggers
-  const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
-  const [isStopModalOpen, setIsStopModalOpen] = useState(false);
-  const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
-  const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
-  const [stopToDelete, setStopToDelete] = useState(null);
-  const [draggedIndex, setDraggedIndex] = useState(null);
-
-  // Modal form states
-  const [newStopName, setNewStopName] = useState('');
-  const [newStopAddress, setNewStopAddress] = useState('');
-  const [insertIndex, setInsertIndex] = useState(null);
-
-  const [newStudentName, setNewStudentName] = useState('');
-  const [selectedStudentStopId, setSelectedStudentStopId] = useState('');
-
-  const [driverSearch, setDriverSearch] = useState('');
-
-  // Sync state with local overrides of Bus #402-A
-  useEffect(() => {
-    const saved = localStorage.getItem('bus_override_#402-A');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.driver) {
-        setActiveDriver(parsed.driver);
-      }
-    }
-  }, []);
-
-  const handleAssignDriver = (driverName) => {
-    setActiveDriver(driverName);
-    
-    // Save to local storage overrides for Bus #402-A
-    const saved = localStorage.getItem('bus_override_#402-A');
-    let parsed = {};
-    if (saved) {
-      parsed = JSON.parse(saved);
-    }
-    parsed.driver = driverName;
-    localStorage.setItem('bus_override_#402-A', JSON.stringify(parsed));
-
-    // Update the fleet list status if needed
-    const updatedFleet = fleet.map(b => {
-      if (b.id === '#402-A') {
-        return { ...b, driver: driverName };
-      }
-      return b;
-    });
-    setFleet(updatedFleet);
-
-    setIsDriverModalOpen(false);
-  };
-
-  const handleAddStop = (e) => {
+  const handleAddRoute = (e) => {
     e.preventDefault();
-    if (!newStopName.trim() || !newStopAddress.trim()) return;
+    if (!newRouteName.trim() || !newDriverName.trim() || !newBusId.trim()) return;
 
-    const newId = Math.max(...stops.map(s => s.id)) + 1;
-    const newStop = {
-      id: newId,
-      name: newStopName.trim(),
-      address: newStopAddress.trim(),
-      type: 'stop'
+    const routeId = `route-${newRouteName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+    const initials = newDriverName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+
+    const newRoute = {
+      id: routeId,
+      name: newRouteName.trim(),
+      status: 'Active',
+      detail: newDetail.trim(),
+      driver: newDriverName.trim(),
+      driverInitials: initials,
+      busId: newBusId.trim().startsWith('#') ? newBusId.trim() : `#${newBusId.trim()}`,
+      timeWindow: newTimeWindow,
+      stopsCount: parseInt(newStopsCount) || 5,
+      capacityUsed: 0,
+      capacityTotal: parseInt(newCapacityTotal) || 50
     };
 
-    let updatedStops = [...stops];
-    if (insertIndex !== null) {
-      updatedStops.splice(insertIndex, 0, newStop);
-    } else {
-      // Insert right before arrival stop
-      const arrivalIdx = updatedStops.findIndex(s => s.type === 'arrival');
-      if (arrivalIdx !== -1) {
-        updatedStops.splice(arrivalIdx, 0, newStop);
-      } else {
-        updatedStops.push(newStop);
-      }
-    }
+    setRoutes([newRoute, ...routes]);
+    setIsAddModalOpen(false);
 
-    setStops(updatedStops);
-    setNewStopName('');
-    setNewStopAddress('');
-    setInsertIndex(null);
-    setIsStopModalOpen(false);
-  };
-
-  const handleAddStudent = (e) => {
-    e.preventDefault();
-    if (!newStudentName.trim() || !selectedStudentStopId) return;
-
-    // Simulate adding a student to a stop
-    alert(`Successfully registered student "${newStudentName.trim()}" to pick-up stop.`);
-    setNewStudentName('');
-    setSelectedStudentStopId('');
-    setIsStudentModalOpen(false);
-  };
-
-  const handleDeleteStop = () => {
-    if (!stopToDelete) return;
-    const stopId = stopToDelete.id;
-    const updatedStops = stops.filter(s => s.id !== stopId);
-    setStops(updatedStops);
-    if (selectedStopId === stopId) {
-      if (updatedStops.length > 0) {
-        setSelectedStopId(updatedStops[0].id);
-      } else {
-        setSelectedStopId(null);
-      }
-    }
-    setStopToDelete(null);
-    setIsDeleteConfirmModalOpen(false);
-  };
-
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === index) return;
-    if (stops[draggedIndex].type === 'arrival' || stops[index].type === 'arrival') return;
-
-    const updatedStops = [...stops];
-    const temp = updatedStops[draggedIndex];
-    updatedStops.splice(draggedIndex, 1);
-    updatedStops.splice(index, 0, temp);
-    setDraggedIndex(index);
-    setStops(updatedStops);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
-
-  const openInsertStopModal = (index) => {
-    setInsertIndex(index);
-    setIsStopModalOpen(true);
+    // Reset Form
+    setNewRouteName('');
+    setNewDriverName('');
+    setNewBusId('');
+    setNewTimeWindow('07:00 AM - 08:30 AM');
+    setNewStopsCount(10);
+    setNewCapacityTotal(60);
+    setNewDetail('Mornings & Afternoons');
   };
 
   const getInitials = (name) => {
@@ -181,21 +127,17 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
       .toUpperCase();
   };
 
-  // Google Maps Dynamic URL based on selected stop
-  const getMapUrl = () => {
-    const selectedStop = stops.find(s => s.id === selectedStopId);
-    if (selectedStop) {
-      // Keyless dynamic map search points to Phnom Penh stop address
-      return `https://www.google.com/maps?q=${encodeURIComponent(selectedStop.name + ', Phnom Penh')}&z=16&output=embed`;
-    }
-    // Default route view of Phnom Penh
-    return `https://www.google.com/maps/embed?pb=!1m28!1m12!1m3!1d31271.21157297371!2d104.897258!3d11.558778!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!4m13!3e0!4m5!1s0x310951448b111165%3A0x6442654c60205842!2sWat+Phnom%2C+Phnom+Penh!3m2!1d11.5760835!2d104.9230554!4m5!1s0x3109513e9a7e6b7b%3A0xe54e6012e8fb7a3!2sCentral+Market%2C+Phnom+Penh!3m2!1d11.5695535!2d104.9210271!5e0!3m2!1sen!2s!4v1719914375000!5m2!1sen!2s`;
-  };
+  // Filter routes based on search and status tabs
+  const filteredRoutes = routes.filter(r => {
+    const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          r.driver.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          r.busId.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'All' || 
+                          r.status.toLowerCase() === statusFilter.toLowerCase();
 
-  const filteredDrivers = INITIAL_DRIVERS.filter(d => 
-    d.id.toLowerCase().includes(driverSearch.toLowerCase()) ||
-    d.number.includes(driverSearch)
-  );
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="dashboard-layout">
@@ -210,10 +152,10 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
         </div>
 
         <nav className="sidebar-nav">
-          <button type="button" className="sidebar-link">
-            <Users size={18} />
+          <Link to="/students" className="sidebar-link">
+            <GraduationCap size={18} />
             Students
-          </button>
+          </Link>
           <Link to="/users" className="sidebar-link">
             <Users size={18} />
             User Management
@@ -256,19 +198,29 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
       <main className="dashboard-main">
         {/* Top Navbar */}
         <header className="top-navbar">
-          <div className="detail-navbar-left" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <Link to="/fleet" className="back-arrow-link" style={{ color: 'var(--icon-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', border: '1px solid rgba(197, 197, 211, 0.3)', backgroundColor: '#ffffff', transition: 'all 0.2s' }}>
-              <ArrowLeft size={16} />
-            </Link>
-            <h2 className="top-navbar-title" style={{ fontSize: '18px', fontWeight: 700 }}>Route 1</h2>
+          <div className="detail-navbar-left">
+            <h2 className="top-navbar-title" style={{ fontSize: '18px', fontWeight: 700 }}>SBMS Dashboard</h2>
           </div>
 
-          <div className="top-navbar-actions">
-            <div className="top-navbar-profile">
-              <div className="profile-avatar">
-                {getInitials(user.email)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div className="top-navbar-search" style={{ border: '1px solid rgba(197, 197, 211, 0.4)', borderRadius: '99px', width: '280px' }}>
+              <Search size={16} className="search-icon" />
+              <input 
+                type="text" 
+                placeholder="Search routes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '8px' }}
+              />
+            </div>
+
+            <div className="top-navbar-actions">
+              <div className="top-navbar-profile">
+                <div className="profile-avatar">
+                  {getInitials(user?.email || 'Admin')}
+                </div>
+                <span>{user?.email || 'admin@sbms.edu'}</span>
               </div>
-              <span>{user.email}</span>
             </div>
           </div>
         </header>
@@ -278,9 +230,9 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
           {/* Header Action Grid */}
           <div className="canvas-header" style={{ alignItems: 'flex-start' }}>
             <div className="header-text-container" style={{ textAlign: 'left' }}>
-              <h1 className="canvas-title" style={{ fontSize: '28px', margin: 0 }}>Route 1 Logistics</h1>
+              <h1 className="canvas-title" style={{ fontSize: '28px', margin: 0 }}>Route Directory</h1>
               <p className="canvas-subtitle" style={{ fontSize: '14px' }}>
-                Route Stop sequence and dynamic assignment planner for Phnom Penh District.
+                Monitor and manage {routes.length} active transportation routes across the district.
               </p>
             </div>
 
@@ -288,493 +240,326 @@ const RouteLogisticsPage = ({ user, onSignOut, fleet, setFleet }) => {
               <button 
                 type="button" 
                 className="add-user-btn"
-                onClick={() => openInsertStopModal(null)}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                onClick={() => setIsFilterModalOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#ffffff', color: 'var(--text-dark)', border: '1px solid rgba(197, 197, 211, 0.5)' }}
               >
-                <Plus size={14} />
-                Add Stop
+                <SlidersHorizontal size={14} />
+                Filter
               </button>
               <button 
                 type="button" 
                 className="add-user-btn"
-                onClick={() => setIsDriverModalOpen(true)}
+                onClick={() => setIsAddModalOpen(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
               >
                 <Plus size={14} />
-                Add Driver
-              </button>
-              <button 
-                type="button" 
-                className="add-user-btn"
-                onClick={() => setIsStudentModalOpen(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Plus size={14} />
-                Add Student
+                New Route
               </button>
             </div>
           </div>
 
-          {/* Logistics Workspace Grid */}
-          <div className="bus-detail-grid" style={{ gridTemplateColumns: '1.2fr 1.5fr', marginTop: '16px' }}>
-            {/* Left Column: Stops Sequence */}
-            <div className="detail-card" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <h3 className="detail-card-title">
-                <MapPin size={16} />
-                STOP SEQUENCE PLANNER
-              </h3>
-              
-              <div className="stops-sequence-list" style={{ position: 'relative', paddingLeft: '8px' }}>
-                {stops.map((stop, index) => {
-                  const isArrival = stop.type === 'arrival';
-                  const isSelected = selectedStopId === stop.id;
-
-                  return (
-                    <div key={stop.id} style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                      {/* Connector Plus Icon (above card, except first stop) */}
-                      {index > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '8px 0' }}>
-                          <button 
-                            type="button"
-                            className="insert-stop-connector-btn"
-                            onClick={() => openInsertStopModal(index)}
-                            title="Insert Stop Here"
-                            style={{
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '50%',
-                              backgroundColor: '#ffffff',
-                              border: '1px solid #cbd5e1',
-                              color: '#64748b',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              zIndex: 10,
-                              fontSize: '12px',
-                              padding: 0,
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                              transition: 'all 0.2s'
-                            }}
-                          >
-                            <Plus size={12} strokeWidth={3} />
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Stop Sequence Item Card */}
-                      <div 
-                        onClick={() => setSelectedStopId(stop.id)}
-                        className={`stop-card ${isSelected ? 'is-selected' : ''}`}
-                        draggable={!isArrival}
-                        onDragStart={(e) => handleDragStart(e, index)}
-                        onDragOver={(e) => handleDragOver(e, index)}
-                        onDragEnd={handleDragEnd}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '16px',
-                          padding: '16px',
-                          borderRadius: '10px',
-                          border: isSelected ? '2px solid var(--primary-brand)' : '1px solid rgba(197, 197, 211, 0.3)',
-                          backgroundColor: isSelected ? 'rgba(0, 35, 111, 0.02)' : '#ffffff',
-                          cursor: isArrival ? 'pointer' : (draggedIndex === index ? 'grabbing' : 'grab'),
-                          transition: 'all 0.2s',
-                          textAlign: 'left',
-                          boxShadow: isSelected ? '0 4px 12px rgba(0, 35, 111, 0.05)' : 'none',
-                          opacity: draggedIndex === index ? 0.4 : 1
-                        }}
-                      >
-                        {/* Drag Handle Indicator */}
-                        {!isArrival && (
-                          <div style={{ color: 'var(--icon-color)', display: 'flex', alignItems: 'center', cursor: 'grab', marginRight: '-4px' }}>
-                            <GripVertical size={16} />
-                          </div>
-                        )}
-                        {/* Index Indicator Circle */}
-                        <div 
-                          className="stop-index-circle"
-                          style={{
-                            width: '36px',
-                            height: '36px',
-                            borderRadius: '50%',
-                            backgroundColor: isArrival ? '#f1f5f9' : (isSelected ? 'var(--primary-brand)' : 'var(--bg-light)'),
-                            color: isArrival ? '#475569' : (isSelected ? '#ffffff' : 'var(--primary-brand)'),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                            fontSize: '14px',
-                            flexShrink: 0
-                          }}
-                        >
-                          {isArrival ? <GraduationCap size={16} /> : index + 1}
-                        </div>
-
-                        {/* Location Details */}
-                        <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1 }}>
-                          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-dark)' }}>
-                            {stop.name}
-                          </span>
-                          <span style={{ fontSize: '12px', color: 'var(--icon-color)', marginTop: '2px' }}>
-                            {stop.address}
-                          </span>
-                        </div>
-
-                        {isArrival && (
-                          <span className="badge" style={{ backgroundColor: '#e0f2fe', color: '#0369a1', fontSize: '10px', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                            ARRIVAL
-                          </span>
-                        )}
-
-                        {!isArrival && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setStopToDelete(stop);
-                              setIsDeleteConfirmModalOpen(true);
-                            }}
-                            className="delete-stop-btn"
-                            title="Delete Stop"
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#ef4444',
-                              cursor: 'pointer',
-                              padding: '8px',
-                              borderRadius: '6px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'all 0.2s'
-                            }}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Column: Map Embed & Widget Overlay */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div 
-                className="bus-image-container"
-                style={{ 
-                  height: '520px', 
-                  position: 'relative', 
-                  overflow: 'hidden', 
-                  borderRadius: '12px',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-                  border: '1px solid rgba(197, 197, 211, 0.3)'
+          {/* Quick status tabs */}
+          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+            {['All', 'Active', 'Delayed'].map(tab => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setStatusFilter(tab)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '99px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  backgroundColor: statusFilter === tab ? 'var(--primary-brand)' : '#ffffff',
+                  color: statusFilter === tab ? '#ffffff' : 'var(--icon-color)',
+                  border: '1px solid rgba(197, 197, 211, 0.3)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
                 }}
               >
-                {/* Embedded Interactive Google Map */}
-                <iframe
-                  title="Route stops Map"
-                  src={getMapUrl()}
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  allowFullScreen=""
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                ></iframe>
+                {tab}
+              </button>
+            ))}
+          </div>
 
-                {/* Status Overlay Widget (Bottom Right) */}
-                <div 
-                  className="map-status-overlay"
-                  style={{
-                    position: 'absolute',
-                    bottom: '16px',
-                    right: '16px',
-                    left: '16px',
-                    backgroundColor: '#ffffff',
-                    borderRadius: '10px',
-                    padding: '16px',
-                    boxShadow: '0 10px 25px rgba(20, 27, 43, 0.15)',
-                    border: '1px solid rgba(197, 197, 211, 0.2)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                    textAlign: 'left'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'rgba(0, 35, 111, 0.06)', color: 'var(--primary-brand)' }}>
-                        <Bus size={18} />
+          {/* Route Cards Grid */}
+          <div className="route-grid">
+            {filteredRoutes.map(route => {
+              const capPercentage = Math.round((route.capacityUsed / route.capacityTotal) * 100);
+              const statusClass = route.status.toLowerCase() === 'active' ? 'route-status-active' : 'route-status-delayed';
+              
+              return (
+                <Link to={`/logistics/${route.id}`} key={route.id} className="route-card">
+                  <div className="route-card-header">
+                    <div>
+                      <h3 className="route-card-title">{route.name}</h3>
+                      <p className="route-card-detail">{route.detail}</p>
+                    </div>
+                    <span className={`route-status-badge ${statusClass}`}>
+                      {route.status}
+                    </span>
+                  </div>
+
+                  <div className="route-card-info-grid">
+                    <div className="route-info-item">
+                      <div className="route-info-icon-wrapper">
+                        <Users size={14} />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary-brand)' }}>
-                          Bus 402
-                        </span>
-                        <span style={{ fontSize: '12px', color: 'var(--icon-color)' }}>
-                          Driver: {activeDriver}
-                        </span>
+                        <span className="route-info-label">Driver</span>
+                        <span className="route-info-value">{route.driver}</span>
                       </div>
                     </div>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#16a34a', backgroundColor: '#dcfce7', padding: '3px 8px', borderRadius: '4px' }}>
-                        Scheduled
-                      </span>
+
+                    <div className="route-info-item">
+                      <div className="route-info-icon-wrapper">
+                        <Bus size={14} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span className="route-info-label">Assigned Bus</span>
+                        <span className="route-info-value">{route.busId}</span>
+                      </div>
+                    </div>
+
+                    <div className="route-info-item">
+                      <div className="route-info-icon-wrapper">
+                        <Clock size={14} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span className="route-info-label">Time Window</span>
+                        <span className="route-info-value">{route.timeWindow}</span>
+                      </div>
+                    </div>
+
+                    <div className="route-info-item">
+                      <div className="route-info-icon-wrapper">
+                        <MapPin size={14} />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span className="route-info-label">Total Stops</span>
+                        <span className="route-info-value">{route.stopsCount} Points</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 600, color: 'var(--icon-color)' }}>
-                      <span>Passenger Capacity</span>
-                      <span>{capacityUsed} / {capacityTotal} ({Math.round((capacityUsed/capacityTotal)*100)}%)</span>
+                      <span>Student Capacity</span>
+                      <span>{route.capacityUsed}/{route.capacityTotal} ({capPercentage}%)</span>
                     </div>
-                    <div className="progress-bar-container">
+                    <div className="progress-bar-container" style={{ height: '6px', borderRadius: '3px' }}>
                       <div 
-                        className="progress-bar-fill"
-                        style={{ width: `${(capacityUsed/capacityTotal)*100}%` }}
+                        className="progress-bar-fill" 
+                        style={{ width: `${capPercentage}%`, height: '100%', borderRadius: '3px' }}
                       ></div>
                     </div>
                   </div>
-                </div>
+
+                  <div className="route-card-footer">
+                    <div className="route-students-group">
+                      <div className="route-student-avatar">A</div>
+                      <div className="route-student-avatar">B</div>
+                      <div className="route-student-avatar">C</div>
+                      <div className="route-student-more-badge">+{route.stopsCount * 2}</div>
+                    </div>
+                    
+                    <span className="route-view-details-link">
+                      View Details
+                      <ArrowRight size={14} />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+            
+            {filteredRoutes.length === 0 && (
+              <div style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px dashed rgba(197, 197, 211, 0.5)', color: 'var(--icon-color)' }}>
+                <MapPin size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                <p style={{ margin: 0, fontWeight: 600 }}>No routes match your search or filter.</p>
               </div>
+            )}
+          </div>
+
+          {/* Pagination Footer */}
+          <div className="pagination-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '32px', borderTop: '1px solid rgba(197, 197, 211, 0.2)', paddingTop: '20px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--icon-color)' }}>
+              Showing {filteredRoutes.length} of {routes.length} active routes
+            </span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button type="button" className="pagination-btn" style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <ChevronLeft size={14} />
+              </button>
+              <button type="button" className="pagination-btn active" style={{ padding: '6px 12px', border: '1px solid var(--primary-brand)', borderRadius: '6px', backgroundColor: 'var(--primary-brand)', color: '#ffffff', cursor: 'pointer', fontWeight: 600 }}>1</button>
+              <button type="button" className="pagination-btn" style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}>2</button>
+              <button type="button" className="pagination-btn" style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}>3</button>
+              <button type="button" className="pagination-btn" style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <ChevronRight size={14} />
+              </button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* --- Assign Driver to Route Modal --- */}
-      {isDriverModalOpen && (
+      {/* --- Add Route Modal --- */}
+      {isAddModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-card" style={{ maxWidth: '440px' }}>
+          <form onSubmit={handleAddRoute} className="modal-card" style={{ maxWidth: '460px' }}>
             <div className="modal-header">
-              <div>
-                <h2>Assign Driver to Route</h2>
-                <p style={{ fontSize: '12px', color: 'var(--icon-color)', margin: '4px 0 0 0' }}>Route 1 - Phnom Penh Central</p>
-              </div>
-              <button type="button" className="modal-close-btn" onClick={() => setIsDriverModalOpen(false)}>
+              <h2>Create New Route</h2>
+              <button type="button" className="modal-close-btn" onClick={() => setIsAddModalOpen(false)}>
                 <X size={16} />
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px' }}>
-              <div className="top-navbar-search" style={{ width: '100%', marginBottom: '12px', border: '1px solid rgba(197, 197, 211, 0.4)' }}>
-                <Search size={16} className="search-icon" />
-                <input 
+            <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Route Name</label>
+                <Input 
                   type="text" 
-                  placeholder="Search by driver name or ID..."
-                  value={driverSearch}
-                  onChange={(e) => setDriverSearch(e.target.value)}
-                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '8px' }}
+                  placeholder="e.g. Route 42 - North Campus"
+                  value={newRouteName}
+                  onChange={(e) => setNewRouteName(e.target.value)}
+                  required
                 />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
-                <span className="modal-section-title" style={{ margin: '0 0 4px 0' }}>AVAILABLE DRIVERS</span>
-                {filteredDrivers.map(d => {
-                  const getStatusClass = (status) => {
-                    switch(status.toLowerCase()) {
-                      case 'available': return 'driver-badge-available';
-                      case 'assigned': return 'driver-badge-assigned';
-                      case 'on leave': return 'driver-badge-leave';
-                      default: return '';
-                    }
-                  };
-
-                  return (
-                    <div 
-                      key={d.id}
-                      onClick={() => d.status !== 'On Leave' && handleAssignDriver(d.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px',
-                        border: '1px solid rgba(197, 197, 211, 0.2)',
-                        borderRadius: '8px',
-                        cursor: d.status === 'On Leave' ? 'not-allowed' : 'pointer',
-                        opacity: d.status === 'On Leave' ? 0.6 : 1,
-                        backgroundColor: '#ffffff',
-                        transition: 'all 0.2s'
-                      }}
-                      className="driver-row-hover"
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(0, 35, 111, 0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 600, color: 'var(--primary-brand)' }}>
-                          {d.avatar}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-dark)' }}>{d.id}</span>
-                          <span style={{ fontSize: '11px', color: 'var(--icon-color)' }}>ID: {d.number} • {d.license} • Exp: {d.expiry}</span>
-                        </div>
-                      </div>
-
-                      <span className={`driver-status-badge ${getStatusClass(d.status)}`}>
-                        {d.status}
-                      </span>
-                    </div>
-                  );
-                })}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Schedule / Details</label>
+                <Input 
+                  type="text" 
+                  placeholder="e.g. Mornings & Afternoons"
+                  value={newDetail}
+                  onChange={(e) => setNewDetail(e.target.value)}
+                  required
+                />
               </div>
-            </div>
-            
-            <div className="modal-footer">
-              <Button type="button" variant="secondary" onClick={() => setIsDriverModalOpen(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* --- Add Stop Modal --- */}
-      {isStopModalOpen && (
-        <div className="modal-overlay">
-          <form onSubmit={handleAddStop} className="modal-card" style={{ maxWidth: '440px' }}>
-            <div className="modal-header">
-              <h2>Add Route Stop</h2>
-              <button type="button" className="modal-close-btn" onClick={() => setIsStopModalOpen(false)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="modal-body" style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Stop Location Name</label>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Driver Name</label>
                   <Input 
                     type="text" 
-                    placeholder="e.g. Aeon Mall Phnom Penh"
-                    value={newStopName}
-                    onChange={(e) => setNewStopName(e.target.value)}
+                    placeholder="e.g. Marcus Sterling"
+                    value={newDriverName}
+                    onChange={(e) => setNewDriverName(e.target.value)}
                     required
                   />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Location Address / Street</label>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Assigned Bus ID</label>
                   <Input 
                     type="text" 
-                    placeholder="e.g. Sothearos Blvd"
-                    value={newStopAddress}
-                    onChange={(e) => setNewStopAddress(e.target.value)}
+                    placeholder="e.g. #402"
+                    value={newBusId}
+                    onChange={(e) => setNewBusId(e.target.value)}
                     required
                   />
                 </div>
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Time Window</label>
+                  <Input 
+                    type="text" 
+                    placeholder="e.g. 06:45 AM - 08:15 AM"
+                    value={newTimeWindow}
+                    onChange={(e) => setNewTimeWindow(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Total Stops</label>
+                  <Input 
+                    type="number" 
+                    placeholder="e.g. 14"
+                    value={newStopsCount}
+                    onChange={(e) => setNewStopsCount(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Total Capacity</label>
+                <Input 
+                  type="number" 
+                  placeholder="e.g. 50"
+                  value={newCapacityTotal}
+                  onChange={(e) => setNewCapacityTotal(e.target.value)}
+                  required
+                />
+              </div>
             </div>
 
             <div className="modal-footer">
-              <Button type="button" variant="secondary" onClick={() => setIsStopModalOpen(false)}>
+              <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit">
-                Add Stop
+                Create Route
               </Button>
             </div>
           </form>
         </div>
       )}
 
-      {/* --- Add Student Modal --- */}
-      {isStudentModalOpen && (
-        <div className="modal-overlay">
-          <form onSubmit={handleAddStudent} className="modal-card" style={{ maxWidth: '440px' }}>
-            <div className="modal-header">
-              <h2>Register Student to Route</h2>
-              <button type="button" className="modal-close-btn" onClick={() => setIsStudentModalOpen(false)}>
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="modal-body" style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Student Full Name</label>
-                  <Input 
-                    type="text" 
-                    placeholder="e.g. Alice Mercer"
-                    value={newStudentName}
-                    onChange={(e) => setNewStudentName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="select-input-wrapper">
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Assign to Pick-up Stop</label>
-                  <select 
-                    className="select-input" 
-                    value={selectedStudentStopId}
-                    onChange={(e) => setSelectedStudentStopId(e.target.value)}
-                    required
-                  >
-                    <option value="">Select Stop...</option>
-                    {stops.filter(s => s.type !== 'arrival').map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.address})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="modal-footer">
-              <Button type="button" variant="secondary" onClick={() => setIsStudentModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">
-                Register Student
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* --- Delete Confirmation Modal --- */}
-      {isDeleteConfirmModalOpen && stopToDelete && (
+      {/* --- Filter Modal --- */}
+      {isFilterModalOpen && (
         <div className="modal-overlay">
           <div className="modal-card" style={{ maxWidth: '400px' }}>
             <div className="modal-header">
-              <h2>Confirm Deletion</h2>
-              <button 
-                type="button" 
-                className="modal-close-btn" 
-                onClick={() => {
-                  setIsDeleteConfirmModalOpen(false);
-                  setStopToDelete(null);
-                }}
-              >
+              <h2>Filter Routes</h2>
+              <button type="button" className="modal-close-btn" onClick={() => setIsFilterModalOpen(false)}>
                 <X size={16} />
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px', textAlign: 'left' }}>
-              <p style={{ fontSize: '14px', color: 'var(--text-dark)', margin: 0, lineHeight: 1.5 }}>
-                Are you sure you want to remove <strong>{stopToDelete.name}</strong> from the stop sequence of Route 1?
-              </p>
-              <p style={{ fontSize: '12px', color: '#ef4444', margin: '8px 0 0 0', fontWeight: 500 }}>
-                This action will update the routing coordinates and passenger stops list.
-              </p>
+            <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'left' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Route Status</label>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                  {['All', 'Active', 'Delayed'].map(status => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => setStatusFilter(status)}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        backgroundColor: statusFilter === status ? 'var(--primary-brand)' : '#f1f5f9',
+                        color: statusFilter === status ? '#ffffff' : 'var(--text-dark)',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Time Duration</label>
+                <select className="select-input" style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                  <option>All Times</option>
+                  <option>Morning Shifts (before 08:00 AM)</option>
+                  <option>Mid-Day Shifts</option>
+                  <option>Afternoon Shifts</option>
+                </select>
+              </div>
             </div>
 
-            <div className="modal-footer" style={{ backgroundColor: '#fafbfc' }}>
-              <Button 
-                type="button" 
-                variant="secondary" 
-                onClick={() => {
-                  setIsDeleteConfirmModalOpen(false);
-                  setStopToDelete(null);
-                }}
-              >
-                Cancel
+            <div className="modal-footer">
+              <Button type="button" variant="secondary" onClick={() => setIsFilterModalOpen(false)}>
+                Close
               </Button>
-              <Button 
-                type="button" 
-                onClick={handleDeleteStop}
-                style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
-              >
-                Remove Stop
+              <Button type="button" onClick={() => setIsFilterModalOpen(false)}>
+                Apply Filters
               </Button>
             </div>
           </div>

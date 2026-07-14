@@ -443,6 +443,33 @@
   color: #475569;
 }
 
+.badge-grade {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.badge-route-1 {
+  background-color: #e0e7ff;
+  color: #3730a3;
+}
+
+.badge-route-2 {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.badge-route-4 {
+  background-color: #f3e8ff;
+  color: #6b21a8;
+}
+
+.badge-route-unassigned {
+  background-color: #f1f5f9;
+  color: #475569;
+  font-style: italic;
+}
+
+
 /* Contact info */
 .contact-cell {
   display: flex;
@@ -1205,4 +1232,176 @@
   background-color: #fee2e2 !important;
   color: #dc2626 !important;
 }
+
+/* --- Route Directory Styles --- */
+.route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+  margin-top: 24px;
+}
+
+.route-card {
+  background: #ffffff;
+  border: 1px solid rgba(197, 197, 211, 0.3);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  color: inherit;
+}
+
+.route-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0, 35, 111, 0.06);
+  border-color: var(--primary-brand);
+}
+
+.route-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.route-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-dark);
+  margin: 0 0 4px 0;
+}
+
+.route-card-detail {
+  font-size: 12px;
+  color: var(--icon-color);
+  margin: 0;
+}
+
+.route-status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+
+.route-status-active {
+  background-color: #dcfce7;
+  color: #15803d;
+}
+
+.route-status-delayed {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.route-status-inactive {
+  background-color: #f1f5f9;
+  color: #475569;
+}
+
+.route-card-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  border-top: 1px solid rgba(197, 197, 211, 0.2);
+  border-bottom: 1px solid rgba(197, 197, 211, 0.2);
+  padding: 12px 0;
+}
+
+.route-info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.route-info-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  color: var(--icon-color);
+}
+
+.route-info-label {
+  font-size: 10px;
+  color: var(--icon-color);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.route-info-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.route-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.route-students-group {
+  display: flex;
+  align-items: center;
+}
+
+.route-student-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  background-color: #e2e8f0;
+  margin-left: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.route-student-avatar:first-child {
+  margin-left: 0;
+}
+
+.route-student-more-badge {
+  background-color: #f1f5f9;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 600;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  margin-left: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.route-view-details-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-brand);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: transform 0.2s ease;
+}
+
+.route-card:hover .route-view-details-link {
+  transform: translateX(4px);
+}
+
 
