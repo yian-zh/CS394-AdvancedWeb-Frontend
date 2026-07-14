@@ -248,6 +248,11 @@
   transition: color 0.2s ease;
 }
 
+.ui-input-icon:has(button),
+.ui-input-icon:has(.ui-input-toggle-btn) {
+  pointer-events: auto;
+}
+
 .ui-input-container:focus-within .ui-input-icon {
   color: var(--primary-brand);
 }

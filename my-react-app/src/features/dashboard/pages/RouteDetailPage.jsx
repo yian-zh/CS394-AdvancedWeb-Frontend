@@ -8,6 +8,7 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import { useRoutes } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
 
 const ROUTE_DETAILS = {
@@ -79,21 +80,58 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const { routeId } = useParams();
   const currentRoute = ROUTE_DETAILS[routeId] || ROUTE_DETAILS['route-1'];
 
-  const [stops, setStops] = useState(currentRoute.stops);
-  const [selectedStopId, setSelectedStopId] = useState(currentRoute.stops[0]?.id || 1);
-  const [activeDriver, setActiveDriver] = useState(currentRoute.driver);
-  const [capacityUsed, setCapacityUsed] = useState(currentRoute.capacityUsed);
-  const [capacityTotal, setCapacityTotal] = useState(currentRoute.capacityTotal);
+  const { data: rawRoutes = [], isLoading: isQueryLoading, error: queryError } = useRoutes();
+  const [stops, setStops] = useState([]);
+  const [selectedStopId, setSelectedStopId] = useState(1);
+  const [activeDriver, setActiveDriver] = useState('');
+  const [capacityUsed, setCapacityUsed] = useState(0);
+  const [capacityTotal, setCapacityTotal] = useState(60);
+
+  const isLoading = isQueryLoading && stops.length === 0;
+  const error = queryError ? queryError.message : null;
 
   // Sync details state with routeId param changes
   useEffect(() => {
-    const routeData = ROUTE_DETAILS[routeId] || ROUTE_DETAILS['route-1'];
-    setStops(routeData.stops);
-    setSelectedStopId(routeData.stops[0]?.id || 1);
-    setActiveDriver(routeData.driver);
-    setCapacityUsed(routeData.capacityUsed);
-    setCapacityTotal(routeData.capacityTotal);
-  }, [routeId]);
+    if (rawRoutes.length > 0) {
+      const matched = rawRoutes.find(r => String(r.route_id) === routeId || `route-${r.route_id}` === routeId);
+      if (matched) {
+        const uiStops = [];
+        uiStops.push({ id: 'start', name: matched.start_location, address: matched.start_location, type: 'stop' });
+        
+        if (matched.students) {
+          matched.students.forEach((s) => {
+            uiStops.push({
+              id: String(s.student_id),
+              name: `${s.first_name} ${s.last_name}'s Pick-up`,
+              address: s.pickup_add || 'Pick-up Address',
+              type: 'stop'
+            });
+          });
+        }
+        
+        uiStops.push({ id: 'end', name: matched.end_location, address: matched.end_location, type: 'arrival' });
+
+        setStops(uiStops);
+        setSelectedStopId(uiStops[0]?.id || 'start');
+        setActiveDriver(matched.driver ? `${matched.driver.first_name} ${matched.driver.last_name}` : 'Sarah Jenkins');
+        setCapacityUsed(matched.students ? matched.students.length : 0);
+      } else {
+        // Fallback to mock data if route not found in API list
+        setStops(currentRoute.stops);
+        setSelectedStopId(currentRoute.stops[0]?.id || 1);
+        setActiveDriver(currentRoute.driver);
+        setCapacityUsed(currentRoute.capacityUsed);
+        setCapacityTotal(currentRoute.capacityTotal);
+      }
+    } else if (!isQueryLoading) {
+      // Fallback to mock data if query loaded but no backend records exist
+      setStops(currentRoute.stops);
+      setSelectedStopId(currentRoute.stops[0]?.id || 1);
+      setActiveDriver(currentRoute.driver);
+      setCapacityUsed(currentRoute.capacityUsed);
+      setCapacityTotal(currentRoute.capacityTotal);
+    }
+  }, [rawRoutes, isQueryLoading, routeId, currentRoute]);
 
   // Modal triggers
   const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
@@ -112,18 +150,6 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const [selectedStudentStopId, setSelectedStudentStopId] = useState('');
 
   const [driverSearch, setDriverSearch] = useState('');
-
-  // Sync state with local overrides of Bus #402-A
-  useEffect(() => {
-    const saved = localStorage.getItem(`bus_override_${currentRoute.busId}`);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.driver) {
-        setActiveDriver(parsed.driver);
-      }
-    }
-  }, [currentRoute.busId]);
-
 
   const handleAssignDriver = (driverName) => {
     setActiveDriver(driverName);

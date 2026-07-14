@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
@@ -8,65 +8,13 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import { useRoutes, useCreateRoute } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
 
-const INITIAL_ROUTES = [
-  { 
-    id: 'route-42', 
-    name: 'Route 42 - North Campus', 
-    status: 'Active', 
-    detail: 'Mornings & Afternoons',
-    driver: 'Marcus Sterling', 
-    driverInitials: 'MS',
-    busId: '#402', 
-    timeWindow: '06:45 AM - 08:15 AM', 
-    stopsCount: 14, 
-    capacityUsed: 32, 
-    capacityTotal: 45 
-  },
-  { 
-    id: 'route-12', 
-    name: 'Route 12 - South District', 
-    status: 'Delayed', 
-    detail: 'Traffic: 12 min delay',
-    driver: 'Elena Rodriguez', 
-    driverInitials: 'ER',
-    busId: '#108', 
-    timeWindow: '07:15 AM - 08:30 AM', 
-    stopsCount: 22, 
-    capacityUsed: 48, 
-    capacityTotal: 52 
-  },
-  { 
-    id: 'route-31', 
-    name: 'Route 31 - Central Special Ed', 
-    status: 'Active', 
-    detail: 'Specialized Equipment Required',
-    driver: 'David Vance', 
-    driverInitials: 'DV',
-    busId: '#S-14', 
-    timeWindow: '07:00 AM - 08:30 AM', 
-    stopsCount: 11, 
-    capacityUsed: 14, 
-    capacityTotal: 15 
-  },
-  { 
-    id: 'route-1', 
-    name: 'Route 1 - Phnom Penh Central', 
-    status: 'Active', 
-    detail: 'Mornings & Afternoons',
-    driver: 'Sarah Jenkins', 
-    driverInitials: 'SJ',
-    busId: '#402-A', 
-    timeWindow: '06:30 AM - 08:00 AM', 
-    stopsCount: 6, 
-    capacityUsed: 45, 
-    capacityTotal: 60 
-  }
-];
-
 const RouteLogisticsPage = ({ user, onSignOut }) => {
-  const [routes, setRoutes] = useState(INITIAL_ROUTES);
+  const { data: rawRoutes = [], isLoading, error } = useRoutes();
+  const createRouteMutation = useCreateRoute();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All'); // All | Active | Delayed
   
@@ -82,39 +30,56 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const [newStopsCount, setNewStopsCount] = useState(10);
   const [newCapacityTotal, setNewCapacityTotal] = useState(60);
   const [newDetail, setNewDetail] = useState('Mornings & Afternoons');
+  const [formErrors, setFormErrors] = useState({});
 
-  const handleAddRoute = (e) => {
+  const routes = useMemo(() => {
+    return rawRoutes.map(r => {
+      const initials = r.driver ? `${r.driver.first_name[0]}${r.driver.last_name[0]}`.toUpperCase() : 'JD';
+      const driverName = r.driver ? `${r.driver.first_name} ${r.driver.last_name}` : 'John Doe';
+
+      return {
+        id: String(r.route_id),
+        name: r.route_name,
+        status: 'Active',
+        detail: `${r.start_location} to ${r.end_location}`,
+        driver: driverName,
+        driverInitials: initials,
+        busId: r.buses && r.buses[0] ? `#${r.buses[0].bus_number}` : '#402-A',
+        timeWindow: '07:00 AM - 08:30 AM',
+        stopsCount: r.students ? r.students.length + 2 : 10,
+        capacityUsed: r.students ? r.students.length : 12,
+        capacityTotal: 60
+      };
+    });
+  }, [rawRoutes]);
+
+  const handleAddRoute = async (e) => {
     e.preventDefault();
     if (!newRouteName.trim() || !newDriverName.trim() || !newBusId.trim()) return;
 
-    const routeId = `route-${newRouteName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
-    const initials = newDriverName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    try {
+      const routeData = {
+        route_name: newRouteName.trim(),
+        start_location: 'Main Depot',
+        end_location: newDetail.trim() || 'Oakwood Elementary School',
+        estimated_duration: 45
+      };
 
-    const newRoute = {
-      id: routeId,
-      name: newRouteName.trim(),
-      status: 'Active',
-      detail: newDetail.trim(),
-      driver: newDriverName.trim(),
-      driverInitials: initials,
-      busId: newBusId.trim().startsWith('#') ? newBusId.trim() : `#${newBusId.trim()}`,
-      timeWindow: newTimeWindow,
-      stopsCount: parseInt(newStopsCount) || 5,
-      capacityUsed: 0,
-      capacityTotal: parseInt(newCapacityTotal) || 50
-    };
+      await createRouteMutation.mutateAsync(routeData);
+      setIsAddModalOpen(false);
 
-    setRoutes([newRoute, ...routes]);
-    setIsAddModalOpen(false);
-
-    // Reset Form
-    setNewRouteName('');
-    setNewDriverName('');
-    setNewBusId('');
-    setNewTimeWindow('07:00 AM - 08:30 AM');
-    setNewStopsCount(10);
-    setNewCapacityTotal(60);
-    setNewDetail('Mornings & Afternoons');
+      // Reset Form
+      setNewRouteName('');
+      setNewDriverName('');
+      setNewBusId('');
+      setNewTimeWindow('07:00 AM - 08:30 AM');
+      setNewStopsCount(10);
+      setNewCapacityTotal(60);
+      setNewDetail('Mornings & Afternoons');
+      setFormErrors({});
+    } catch (err) {
+      setFormErrors({ submit: err.message || 'Failed to create route' });
+    }
   };
 
   const getInitials = (name) => {
@@ -284,8 +249,18 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
           {/* Route Cards Grid */}
           <div className="route-grid">
-            {filteredRoutes.map(route => {
-              const capPercentage = Math.round((route.capacityUsed / route.capacityTotal) * 100);
+            {isLoading ? (
+              <div style={{ textAlign: 'center', padding: '32px', gridColumn: '1 / -1', color: 'var(--primary-brand)' }}>
+                <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
+                <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading routes...</span>
+              </div>
+            ) : error ? (
+              <div style={{ textAlign: 'center', padding: '32px', gridColumn: '1 / -1', color: '#dc2626' }}>
+                Error loading routes: {error}
+              </div>
+            ) : (
+              filteredRoutes.map(route => {
+                const capPercentage = Math.round((route.capacityUsed / route.capacityTotal) * 100);
               const statusClass = route.status.toLowerCase() === 'active' ? 'route-status-active' : 'route-status-delayed';
               
               return (
@@ -370,9 +345,10 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
                   </div>
                 </Link>
               );
-            })}
+            })
+          )}
             
-            {filteredRoutes.length === 0 && (
+            {!isLoading && filteredRoutes.length === 0 && (
               <div style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', border: '1px dashed rgba(197, 197, 211, 0.5)', color: 'var(--icon-color)' }}>
                 <MapPin size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
                 <p style={{ margin: 0, fontWeight: 600 }}>No routes match your search or filter.</p>
@@ -411,8 +387,13 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
               </button>
             </div>
 
-            <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
+             <div className="modal-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {formErrors.submit && (
+                  <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', padding: '10px', borderRadius: '6px', marginBottom: '16px', fontSize: '14px', textAlign: 'left' }}>
+                    {formErrors.submit}
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Route Name</label>
                 <Input 
                   type="text" 

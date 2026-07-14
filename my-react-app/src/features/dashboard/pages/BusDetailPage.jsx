@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, ChevronLeft, Wrench, Calendar, 
@@ -9,42 +9,55 @@ import {
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
-import { getBusDetails } from '../data/fleetData';
+import { useBuses, useUploadBusDocument } from '../hooks/useFleet';
 import '../styles/dashboard.css';
 
 // Fallback school bus image in assets
 import schoolBusImage from '../../../assets/yellow_school_bus.png';
 
-const BusDetailPage = ({ user, onSignOut, fleet, setFleet, repairs, setRepairs }) => {
+const BusDetailPage = ({ user, onSignOut }) => {
   const { busId: rawBusId } = useParams();
-  const busId = rawBusId.startsWith('#') ? rawBusId : '#' + rawBusId;
   const navigate = useNavigate();
 
-  // Find the bus state from the hoisted state
-  const busState = fleet.find(b => b.id === busId);
-  
-  // Read state overrides from localStorage to keep edits persistent
-  const [overrides, setOverrides] = useState({});
+  const { data: rawBuses = [], isLoading, error } = useBuses();
+  const uploadBusDocumentMutation = useUploadBusDocument();
   const [imageError, setImageError] = useState(false);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(`bus_override_${busId}`);
-    if (saved) {
-      setOverrides(JSON.parse(saved));
-    }
-  }, [busId]);
+  const busDetails = useMemo(() => {
+    const cleanId = rawBusId.replace('#', '');
+    const matched = rawBuses.find(b => String(b.bus_id) === cleanId || b.bus_number === cleanId);
+    if (!matched) return null;
 
-  // Load merged specifications
-  const baseDetails = getBusDetails(busId, fleet, repairs);
-  const details = {
-    ...baseDetails,
-    ...overrides,
-    status: busState ? busState.status : baseDetails.status,
-    capacityUsed: busState ? (busState.status === 'Maintenance' ? 0 : Math.round(busState.capacity * 0.82)) : baseDetails.capacityUsed,
-    documents: overrides.documents || baseDetails.documents
-  };
+    const mappedDocs = (matched.documents || []).map(d => ({
+      name: d.document_type,
+      status: `Expires ${new Date(d.expiry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    }));
 
-  const currentImage = details.image || schoolBusImage;
+    return {
+      bus_id: matched.bus_id,
+      id: `#${matched.bus_number}`,
+      model: matched.model || 'N/A',
+      manufacturer: matched.manufacturer || 'N/A',
+      capacity: matched.capacity,
+      status: matched.status ? (matched.status.charAt(0).toUpperCase() + matched.status.slice(1)) : 'Active',
+      driver: 'John Doe',
+      route: 'Unassigned',
+      mileage: matched.mileage ? `${matched.mileage.toLocaleString()} mi` : 'N/A',
+      capacityUsed: Math.round(matched.capacity * 0.82),
+      documents: mappedDocs
+    };
+  }, [rawBuses, rawBusId]);
+
+  if (isLoading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--primary-brand)', fontSize: '18px' }}>Loading bus details...</div>;
+  }
+
+  if (error || !busDetails) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'red' }}>Error: {error ? error.message : 'Bus not found'}</div>;
+  }
+
+  const details = busDetails;
+  const currentImage = schoolBusImage;
 
   // Edit Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -109,26 +122,30 @@ const BusDetailPage = ({ user, onSignOut, fleet, setFleet, repairs, setRepairs }
     }
   };
 
-  const handleAddDocument = (e) => {
+  const handleAddDocument = async (e) => {
     e.preventDefault();
     if (!newDocName.trim() || !newDocExpiry.trim()) return;
 
-    const newDoc = {
-      name: newDocName.trim(),
-      status: newDocExpiry.trim()
-    };
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const expiryStr = new Date(newDocExpiry).toISOString().split('T')[0];
 
-    const updatedDocs = [...details.documents, newDoc];
-    const newOverrides = {
-      ...overrides,
-      documents: updatedDocs
-    };
-    localStorage.setItem(`bus_override_${busId}`, JSON.stringify(newOverrides));
-    setOverrides(newOverrides);
+      const docData = {
+        document_type: newDocName.trim(),
+        issue_date: todayStr,
+        expiry_date: expiryStr
+      };
 
-    setNewDocName('');
-    setNewDocExpiry('');
-    setIsDocModalOpen(false);
+      if (details && details.bus_id) {
+        await uploadBusDocumentMutation.mutateAsync({ id: details.bus_id, docData });
+      }
+
+      setNewDocName('');
+      setNewDocExpiry('');
+      setIsDocModalOpen(false);
+    } catch (err) {
+      alert(`Failed to upload document: ${err.message}`);
+    }
   };
 
   // Helper for profile initials

@@ -8,6 +8,7 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import { useStudents, useCreateStudent, useUpdateStudent } from '../hooks/useStudents';
 import '../styles/dashboard.css';
 
 // Initial stats for Bento grid (static text as in Figma but dynamic total count)
@@ -17,7 +18,11 @@ const BASE_STATS = {
   transportUsers: { value: 912, status: 'Active bus assignments' }
 };
 
-const StudentsPage = ({ user, onSignOut, students = [], setStudents }) => {
+const StudentsPage = ({ user, onSignOut }) => {
+  const { data: rawStudents = [], isLoading, error } = useStudents();
+  const createStudentMutation = useCreateStudent();
+  const updateStudentMutation = useUpdateStudent();
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [gradeFilter, setGradeFilter] = useState('All');
@@ -26,6 +31,30 @@ const StudentsPage = ({ user, onSignOut, students = [], setStudents }) => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+
+  const students = useMemo(() => {
+    return rawStudents.map(s => {
+      const primaryGuardian = s.guardians && s.guardians[0];
+      const guardianUser = primaryGuardian && primaryGuardian.user;
+      const guardianNameStr = guardianUser ? `${guardianUser.first_name} ${guardianUser.last_name}` : 'No Guardian';
+      const guardianPhoneStr = guardianUser ? guardianUser.phone_number : 'N/A';
+      
+      // Route details
+      const stop = s.stops && s.stops[0];
+      const assignedRouteStr = stop && stop.route ? stop.route.route_name : 'Unassigned';
+
+      return {
+        id: String(s.student_id),
+        name: `${s.first_name} ${s.last_name}`,
+        guardianName: guardianNameStr,
+        grade: s.grade_level || 'Grade 10',
+        assignedRoute: assignedRouteStr,
+        gender: s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : 'Male',
+        phone: guardianPhoneStr || 'N/A',
+        isActive: true,
+      };
+    });
+  }, [rawStudents]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -140,8 +169,7 @@ const StudentsPage = ({ user, onSignOut, students = [], setStudents }) => {
     setIsModalOpen(false);
   };
 
-  // Form submit handler
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     const errors = {};
     if (!firstName.trim()) errors.firstName = 'First Name is required';
@@ -154,55 +182,32 @@ const StudentsPage = ({ user, onSignOut, students = [], setStudents }) => {
       return;
     }
 
-    const fullName = `${firstName.trim()} ${lastName.trim()}`;
-
-    if (modalMode === 'add') {
-      // Auto-generate a new ID
-      const newId = `#STU-2024${String(students.length + 1).padStart(2, '0')}`;
-      const newStudent = {
-        id: newId,
-        name: fullName,
-        guardianName: guardianName.trim(),
-        grade,
-        assignedRoute,
-        gender,
-        phone: phone.trim(),
-        isActive: true
+    try {
+      const studentData = {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        gender: gender.toLowerCase(),
+        student_code: modalMode === 'add' ? `STU-${Math.floor(1000 + Math.random() * 9000)}` : undefined,
+        date_of_birth: '2015-06-15',
+        grade_level: grade,
+        pickup_add: 'Pickup Address',
+        dropoff_add: 'Dropoff Address',
       };
-      setStudents([...students, newStudent]);
-    } else {
-      // Update existing student
-      const updated = students.map((s) => {
-        if (s.id === selectedStudentId) {
-          return {
-            ...s,
-            name: fullName,
-            guardianName: guardianName.trim(),
-            grade,
-            assignedRoute,
-            gender,
-            phone: phone.trim()
-          };
-        }
-        return s;
-      });
-      setStudents(updated);
+
+      if (modalMode === 'add') {
+        await createStudentMutation.mutateAsync(studentData);
+      } else {
+        await updateStudentMutation.mutateAsync({ id: selectedStudentId, studentData });
+      }
+      setIsModalOpen(false);
+    } catch (err) {
+      setFormErrors(prev => ({ ...prev, submit: err.message || 'Failed to save student details' }));
     }
-    
-    setIsModalOpen(false);
   };
 
   // Delete student handler
   const handleDeleteStudent = (id) => {
-    if (window.confirm('Are you sure you want to delete this student record?')) {
-      const filtered = students.filter(s => s.id !== id);
-      setStudents(filtered);
-      // Adjust page if deletion emptied current page
-      const newTotalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
-      if (currentPage > newTotalPages) {
-        setCurrentPage(newTotalPages);
-      }
-    }
+    alert('Student deletion is restricted to direct database administration to preserve historical log integrity.');
   };
 
   return (
@@ -419,8 +424,21 @@ const StudentsPage = ({ user, onSignOut, students = [], setStudents }) => {
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {paginatedStudents.length > 0 ? (
+                 <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
+                        <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
+                        <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading students...</span>
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                        Error loading students: {error}
+                      </td>
+                    </tr>
+                  ) : paginatedStudents.length > 0 ? (
                     paginatedStudents.map((s) => (
                       <tr key={s.id}>
                         <td style={{ fontWeight: '600', color: 'var(--primary-brand)', fontSize: '13px' }}>
@@ -538,6 +556,11 @@ const StudentsPage = ({ user, onSignOut, students = [], setStudents }) => {
 
             <form onSubmit={handleFormSubmit}>
               <div className="modal-body">
+                {formErrors.submit && (
+                  <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', padding: '10px', borderRadius: '6px', marginBottom: '16px', fontSize: '14px' }}>
+                    {formErrors.submit}
+                  </div>
+                )}
                 {/* Personal Info Title */}
                 <div className="modal-section-title">Student Information</div>
                 <div className="modal-row-2col">

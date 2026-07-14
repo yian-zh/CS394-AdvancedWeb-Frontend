@@ -3,15 +3,19 @@ import { Bus, CheckCircle2 } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import LoginForm from '../components/LoginForm';
 import RegisterForm from '../components/RegisterForm';
+import ForgotPasswordForm from '../components/ForgotPasswordForm';
+import ResetPasswordForm from '../components/ResetPasswordForm';
 import '../styles/auth.css';
 
 const AuthPage = ({ onLogin }) => {
-  const [activeTab, setActiveTab] = useState('signin'); // 'signin' or 'signup'
-  const [authSuccess, setAuthSuccess] = useState(null); // { type: 'register', email: string }
+  const [activeTab, setActiveTab] = useState('signin'); // 'signin', 'signup', 'forgot', 'reset'
+  const [authSuccess, setAuthSuccess] = useState(null); // { type: 'register' | 'reset', email: string }
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
 
   const handleLoginSuccess = (data) => {
     if (onLogin) {
-      onLogin({ email: data.email });
+      onLogin(data.user);
     }
   };
 
@@ -42,7 +46,9 @@ const AuthPage = ({ onLogin }) => {
             </span>
             <span className="auth-logo-text">SBMS</span>
           </div>
-          <h1 className="auth-title">Welcome Back</h1>
+          <h1 className="auth-title">
+            {activeTab === 'forgot' || activeTab === 'reset' ? 'Password Recovery' : 'Welcome Back'}
+          </h1>
           <p className="auth-subtitle">School Bus Management System Portal</p>
         </header>
 
@@ -54,10 +60,12 @@ const AuthPage = ({ onLogin }) => {
                 <CheckCircle2 size={48} />
               </div>
               <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--primary-brand)', margin: '0 0 8px 0' }}>
-                Account Created Successfully!
+                {authSuccess.type === 'register' ? 'Account Created Successfully!' : 'Password Reset Successfully!'}
               </h2>
               <p style={{ fontSize: '14px', color: 'var(--text-dark)', marginBottom: '24px', opacity: 0.8 }}>
-                Verification email sent to {authSuccess.email}
+                {authSuccess.type === 'register' 
+                  ? `Verification email sent to ${authSuccess.email}` 
+                  : 'Your password has been updated successfully. You can now sign in.'}
               </p>
               <button
                 type="button"
@@ -70,32 +78,61 @@ const AuthPage = ({ onLogin }) => {
           ) : (
             <>
               {/* Tab Navigation */}
-              <div className="auth-tabs" role="tablist">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === 'signin'}
-                  className={`auth-tab-btn ${activeTab === 'signin' ? 'is-active' : ''}`}
-                  onClick={() => setActiveTab('signin')}
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === 'signup'}
-                  className={`auth-tab-btn ${activeTab === 'signup' ? 'is-active' : ''}`}
-                  onClick={() => setActiveTab('signup')}
-                >
-                  Register
-                </button>
-              </div>
+              {(activeTab === 'signin' || activeTab === 'signup') && (
+                <div className="auth-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'signin'}
+                    className={`auth-tab-btn ${activeTab === 'signin' ? 'is-active' : ''}`}
+                    onClick={() => setActiveTab('signin')}
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'signup'}
+                    className={`auth-tab-btn ${activeTab === 'signup' ? 'is-active' : ''}`}
+                    onClick={() => setActiveTab('signup')}
+                  >
+                    Register
+                  </button>
+                </div>
+              )}
 
               {/* Form Body Toggle */}
-              {activeTab === 'signin' ? (
-                <LoginForm onSuccess={handleLoginSuccess} />
-              ) : (
+              {activeTab === 'signin' && (
+                <LoginForm 
+                  onSuccess={handleLoginSuccess} 
+                  onForgotPassword={() => setActiveTab('forgot')}
+                />
+              )}
+              {activeTab === 'signup' && (
                 <RegisterForm onSuccess={handleRegisterSuccess} />
+              )}
+              {activeTab === 'forgot' && (
+                <ForgotPasswordForm 
+                  onSuccess={({ email, token }) => {
+                    setResetEmail(email);
+                    setResetToken(token);
+                    setActiveTab('reset');
+                  }}
+                  onCancel={() => setActiveTab('signin')}
+                />
+              )}
+              {activeTab === 'reset' && (
+                <ResetPasswordForm 
+                  initialEmail={resetEmail}
+                  initialToken={resetToken}
+                  onSuccess={() => {
+                    setAuthSuccess({
+                      type: 'reset',
+                      email: resetEmail,
+                    });
+                  }}
+                  onCancel={() => setActiveTab('signin')}
+                />
               )}
             </>
           )}

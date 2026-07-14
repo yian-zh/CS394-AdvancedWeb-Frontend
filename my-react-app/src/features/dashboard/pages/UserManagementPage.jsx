@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
@@ -8,44 +8,13 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import { useUsers, useCreateUser } from '../hooks/useUsers';
 import '../styles/dashboard.css';
 
-// Initial Mock User Data from Figma design
-const INITIAL_USERS = [
-  {
-    id: 'D-4921',
-    name: 'Marcus Johnson',
-    role: 'Driver',
-    email: 'mjohnson@sbms.edu',
-    phone: '555-0192',
-    assignment: 'Route 42 - North',
-    isActive: true,
-  },
-  {
-    id: 'G-8832',
-    name: 'Sarah Williams',
-    role: 'Guardian',
-    email: 's.williams@email.com',
-    phone: '555-0144',
-    assignment: '2 Students',
-    isActive: true,
-  },
-  {
-    id: 'D-3391',
-    name: 'David Rodriguez',
-    role: 'Driver',
-    email: 'drod@sbms.edu',
-    phone: '555-0882',
-    assignment: 'Unassigned',
-    isActive: false,
-  }
-];
-
-// Counter for generating unique IDs
-let nextUserId = 5000;
-
 const UserManagementPage = ({ user, onSignOut }) => {
-  const [users, setUsers] = useState(INITIAL_USERS);
+  const { data: rawUsers = [], isLoading, error } = useUsers();
+  const createUserMutation = useCreateUser();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('All Users'); // 'All Users' | 'Drivers' | 'Guardians' | 'Administrators'
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,6 +31,18 @@ const UserManagementPage = ({ user, onSignOut }) => {
   const [newUserConfirmPassword, setNewUserConfirmPassword] = useState('');
   const [newUserAssignment, setNewUserAssignment] = useState('');
   const [formErrors, setFormErrors] = useState({});
+
+  const users = useMemo(() => {
+    return rawUsers.map(u => ({
+      id: u.user_id,
+      name: `${u.first_name} ${u.last_name}`,
+      role: u.role.charAt(0).toUpperCase() + u.role.slice(1),
+      email: u.email,
+      phone: u.phone_number || 'N/A',
+      assignment: u.role === 'driver' ? 'Driver Profile' : (u.role === 'guardian' ? 'Guardian Profile' : 'System Admin'),
+      isActive: !!u.status,
+    }));
+  }, [rawUsers]);
 
   // Helper to extract initials
   const getInitials = (name) => {
@@ -137,26 +118,28 @@ const UserManagementPage = ({ user, onSignOut }) => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    // Generate prefix based on role
-    const prefix = newUserRole === 'Driver' ? 'D' : newUserRole === 'Guardian' ? 'G' : 'A';
-    const newId = `${prefix}-${nextUserId++}`;
+    try {
+      const apiRole = newUserRole.toLowerCase() === 'administrator' ? 'admin' : newUserRole.toLowerCase();
+      const userData = {
+        role: apiRole,
+        username: newUserUsername.trim(),
+        first_name: newUserFirstName.trim(),
+        last_name: newUserLastName.trim(),
+        gender: newUserGender.toLowerCase(),
+        email: newUserEmail.trim(),
+        password: newUserPassword,
+        phone_number: newUserPhone.trim()
+      };
 
-    const newUser = {
-      id: newId,
-      name: `${newUserFirstName.trim()} ${newUserLastName.trim()}`,
-      role: newUserRole,
-      email: newUserEmail,
-      phone: newUserPhone,
-      assignment: newUserAssignment.trim() || 'Unassigned',
-      isActive: true,
-    };
-
-    setUsers([newUser, ...users]);
-    closeModal();
+      await createUserMutation.mutateAsync(userData);
+      closeModal();
+    } catch (err) {
+      setFormErrors(prev => ({ ...prev, submit: err.message || 'Failed to create user' }));
+    }
   };
 
   const closeModal = () => {
@@ -317,7 +300,20 @@ const UserManagementPage = ({ user, onSignOut }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.length > 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
+                        <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
+                        <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading users...</span>
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan="4" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                        Error loading users: {error}
+                      </td>
+                    </tr>
+                  ) : filteredUsers.length > 0 ? (
                     filteredUsers.map((u) => (
                       <tr key={u.id} className={u.isActive ? '' : 'is-inactive'}>
                         <td>
@@ -402,6 +398,11 @@ const UserManagementPage = ({ user, onSignOut }) => {
 
             <form onSubmit={handleAddUser}>
               <div className="modal-body" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+                {formErrors.submit && (
+                  <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', padding: '10px', borderRadius: '6px', marginBottom: '16px', fontSize: '14px' }}>
+                    {formErrors.submit}
+                  </div>
+                )}
                 {/* ROLE ASSIGNMENT */}
                 <div className="modal-section-title">Role Assignment</div>
                 <div className="select-input-wrapper" style={{ marginBottom: '16px' }}>

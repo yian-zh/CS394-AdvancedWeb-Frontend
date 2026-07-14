@@ -1,50 +1,33 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, Wrench, Calendar, AlertTriangle, MapPin,
-  GraduationCap
+  GraduationCap, FileText
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import { useBuses, usePendingMaintenance, useCreateMaintenanceRequest, useResolveMaintenanceRequest, useCreateBus } from '../hooks/useFleet';
 import '../styles/dashboard.css';
 
-// Initial active fleet data from Figma
-const INITIAL_FLEET = [
-  { id: '#402-A', capacity: 65, status: 'Active' },
-  { id: '#315-B', capacity: 92, status: 'Active' },
-  { id: '#108-C', capacity: 0, status: 'Maintenance' }
-];
+const FleetManagementPage = ({ user, onSignOut }) => {
+  const { data: rawBuses = [], isLoading: isBusesLoading, error: busesError } = useBuses();
+  const { data: maintenanceData = [], isLoading: isMaintLoading, error: maintError } = usePendingMaintenance();
+  
+  const createMaintenanceMutation = useCreateMaintenanceRequest();
+  const resolveMaintenanceMutation = useResolveMaintenanceRequest();
+  const createBusMutation = useCreateBus();
 
-// Initial maintenance queue data from Figma
-const INITIAL_REPAIRS = [
-  {
-    id: '#108-C',
-    issue: 'Transmission fluid leak detected during morning inspection.',
-    priority: 'High',
-    date: 'Oct 24, 2023'
-  },
-  {
-    id: '#212-A',
-    issue: 'Worn brake pads on rear axle (routine schedule).',
-    priority: 'Medium',
-    date: 'Oct 22, 2023'
-  },
-  {
-    id: '#055-B',
-    issue: 'Passenger side mirror motor unresponsive.',
-    priority: 'Low',
-    date: 'Oct 20, 2023'
-  }
-];
+  const isLoading = isBusesLoading || isMaintLoading;
+  const error = busesError ? (busesError.message || 'Failed to load buses') : (maintError ? (maintError.message || 'Failed to load maintenance requests') : null);
 
-const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRepairs }) => {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [isBusModalOpen, setIsBusModalOpen] = useState(false);
   const [selectedRepair, setSelectedRepair] = useState(null);
 
   // New Repair Form State
@@ -53,9 +36,50 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
   const [newPriority, setNewPriority] = useState('Medium'); // High | Medium | Low
   const [formErrors, setFormErrors] = useState({});
 
+  // New Bus Form State
+  const [busNumber, setBusNumber] = useState('');
+  const [plateNumber, setPlateNumber] = useState('');
+  const [busCapacity, setBusCapacity] = useState('60');
+  const [busModel, setBusModel] = useState('');
+  const [busManufacturer, setBusManufacturer] = useState('');
+  const [busYear, setBusYear] = useState(new Date().getFullYear().toString());
+  const [busMileage, setBusMileage] = useState('0');
+  const [busDepot, setBusDepot] = useState('');
+  const [busErrors, setBusErrors] = useState({});
+
   // Update Repair Form State
   const [updateIssue, setUpdateIssue] = useState('');
   const [updatePriority, setUpdatePriority] = useState('Medium');
+
+  const fleet = useMemo(() => {
+    return rawBuses.map(b => ({
+      id: `#${b.bus_number}`,
+      capacity: b.capacity,
+      status: b.status.charAt(0).toUpperCase() + b.status.slice(1)
+    }));
+  }, [rawBuses]);
+
+  const repairs = useMemo(() => {
+    return maintenanceData.map(r => {
+      const matched = rawBuses.find(b => b.bus_id === r.bus_id);
+      const busNum = matched ? `#${matched.bus_number}` : `#Bus-${r.bus_id}`;
+      const priorityVal = r.priority || 'Medium';
+      const formattedDate = r.created_at ? new Date(r.created_at).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      }) : 'Oct 24, 2023';
+
+      return {
+        id: busNum,
+        issue: r.issue,
+        priority: priorityVal,
+        date: formattedDate,
+        mongo_id: r._id,
+        bus_id: r.bus_id,
+      };
+    });
+  }, [maintenanceData, rawBuses]);
 
   // Helper for profile initials
   const getInitials = (name) => {
@@ -103,36 +127,27 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
     return Object.keys(errors).length === 0;
   };
 
-  const handleAddRepair = (e) => {
+  const handleAddRepair = async (e) => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    const today = new Date();
-    const formattedDate = today.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+    try {
+      const cleanBusNo = newBusId.replace('#', '');
+      const matched = rawBuses.find(b => b.bus_number === cleanBusNo);
+      const busIdVal = matched ? matched.bus_id : 1;
 
-    const newRepair = {
-      id: newBusId.trim(),
-      issue: newIssue.trim(),
-      priority: newPriority,
-      date: formattedDate
-    };
+      const requestData = {
+        bus_id: busIdVal,
+        driver_id: user.user_id || 2,
+        issue: newIssue.trim(),
+        photos: [],
+      };
 
-    setRepairs([newRepair, ...repairs]);
-
-    // Also transition the corresponding bus into 'Maintenance' status locally if it exists
-    const updatedFleet = fleet.map(b => {
-      if (b.id === newBusId.trim()) {
-        return { ...b, status: 'Maintenance', capacity: 0 };
-      }
-      return b;
-    });
-    setFleet(updatedFleet);
-
-    closeAddModal();
+      await createMaintenanceMutation.mutateAsync(requestData);
+      closeAddModal();
+    } catch (err) {
+      setFormErrors(prev => ({ ...prev, submit: err.message || 'Failed to submit maintenance request' }));
+    }
   };
 
   // Handle Update Repair
@@ -145,36 +160,27 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
 
   const handleUpdateRepair = (e) => {
     e.preventDefault();
-    if (!updateIssue.trim()) return;
-
-    const updatedRepairs = repairs.map((r) => {
-      if (r.id === selectedRepair.id && r.date === selectedRepair.date) {
-        return { ...r, issue: updateIssue, priority: updatePriority };
-      }
-      return r;
-    });
-
-    setRepairs(updatedRepairs);
+    alert('Updating pending maintenance details is not supported by the backend. Please resolve the request and create a new request if needed.');
     closeUpdateModal();
   };
 
-  const handleResolveRepair = () => {
-    // Remove from repairs queue
-    const updatedRepairs = repairs.filter(
-      (r) => !(r.id === selectedRepair.id && r.date === selectedRepair.date)
-    );
-    setRepairs(updatedRepairs);
-
-    // Revert the bus status to 'Active'
-    const updatedFleet = fleet.map(b => {
-      if (b.id === selectedRepair.id) {
-        return { ...b, status: 'Active', capacity: 60 }; // Reset to a safe starting capacity
+  const handleResolveRepair = async () => {
+    try {
+      if (selectedRepair && selectedRepair.mongo_id) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        await resolveMaintenanceMutation.mutateAsync({
+          mongoId: selectedRepair.mongo_id,
+          repairData: {
+            repair_details: `Resolved issue: ${selectedRepair.issue}`,
+            repair_cost: 0,
+            repair_date: todayStr
+          }
+        });
       }
-      return b;
-    });
-    setFleet(updatedFleet);
-
-    closeUpdateModal();
+      closeUpdateModal();
+    } catch (err) {
+      alert(err.message || 'Failed to resolve maintenance request');
+    }
   };
 
   const closeAddModal = () => {
@@ -190,6 +196,62 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
     setSelectedRepair(null);
     setUpdateIssue('');
     setUpdatePriority('Medium');
+  };
+
+  const validateBusForm = () => {
+    const errors = {};
+    if (!busNumber.trim()) errors.busNumber = 'Bus Number is required';
+    if (!plateNumber.trim()) errors.plateNumber = 'Plate Number is required';
+    if (!busCapacity.trim()) {
+      errors.busCapacity = 'Capacity is required';
+    } else if (isNaN(busCapacity) || parseInt(busCapacity) < 1) {
+      errors.busCapacity = 'Capacity must be at least 1';
+    }
+    if (busYear.trim() && (isNaN(busYear) || parseInt(busYear) < 1900 || parseInt(busYear) > 2100)) {
+      errors.busYear = 'Enter a valid year (1900 - 2100)';
+    }
+    if (busMileage.trim() && (isNaN(busMileage) || parseInt(busMileage) < 0)) {
+      errors.busMileage = 'Mileage must be 0 or more';
+    }
+    setBusErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleAddBus = async (e) => {
+    e.preventDefault();
+    if (!validateBusForm()) return;
+
+    try {
+      const busData = {
+        bus_number: busNumber.trim(),
+        plate_number: plateNumber.trim(),
+        capacity: parseInt(busCapacity),
+        model: busModel.trim() || undefined,
+        manufacturer: busManufacturer.trim() || undefined,
+        year: busYear.trim() ? parseInt(busYear) : undefined,
+        mileage: busMileage.trim() ? parseInt(busMileage) : undefined,
+        availability_status: 'active',
+        depot_location: busDepot.trim() || undefined,
+      };
+
+      await createBusMutation.mutateAsync(busData);
+      closeBusModal();
+    } catch (err) {
+      setBusErrors(prev => ({ ...prev, submit: err.message || 'Failed to add bus to the fleet' }));
+    }
+  };
+
+  const closeBusModal = () => {
+    setIsBusModalOpen(false);
+    setBusNumber('');
+    setPlateNumber('');
+    setBusCapacity('60');
+    setBusModel('');
+    setBusManufacturer('');
+    setBusYear(new Date().getFullYear().toString());
+    setBusMileage('0');
+    setBusDepot('');
+    setBusErrors({});
   };
 
   return (
@@ -281,14 +343,25 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
               <h1 className="canvas-title">Fleet Overview</h1>
               <p className="canvas-subtitle">Real-time status and maintenance tracking.</p>
             </div>
-            <button 
-              type="button" 
-              className="add-user-btn"
-              onClick={() => setIsAddModalOpen(true)}
-            >
-              <Plus size={16} />
-              Log New Repair
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                type="button" 
+                className="add-user-btn"
+                onClick={() => setIsBusModalOpen(true)}
+                style={{ backgroundColor: 'var(--text-dark)' }}
+              >
+                <Plus size={16} />
+                Add Bus
+              </button>
+              <button 
+                type="button" 
+                className="add-user-btn"
+                onClick={() => setIsAddModalOpen(true)}
+              >
+                <Plus size={16} />
+                Log New Repair
+              </button>
+            </div>
           </div>
 
           {/* Bento Stats Cards */}
@@ -316,8 +389,18 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
           <div>
             <h2 className="active-fleet-title">Active Fleet Status</h2>
             <div className="fleet-cards-grid">
-              {fleet.map((bus) => (
-                <Link 
+              {isLoading ? (
+                <div style={{ textAlign: 'center', padding: '32px', gridColumn: '1 / -1', color: 'var(--primary-brand)' }}>
+                  <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
+                  <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading fleet...</span>
+                </div>
+              ) : error ? (
+                <div style={{ textAlign: 'center', padding: '32px', gridColumn: '1 / -1', color: '#dc2626' }}>
+                  Error loading fleet: {error}
+                </div>
+              ) : fleet.length > 0 ? (
+                fleet.map((bus) => (
+                  <Link 
                   key={bus.id} 
                   to={`/fleet/${encodeURIComponent(bus.id)}`} 
                   className="bus-card"
@@ -361,7 +444,12 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
                     </span>
                   </div>
                 </Link>
-              ))}
+              ))
+            ) : (
+              <div style={{ textAlign: 'center', padding: '32px', gridColumn: '1 / -1', color: 'var(--icon-color)' }}>
+                No active fleet vehicles found.
+              </div>
+            )}
             </div>
           </div>
 
@@ -395,7 +483,20 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRepairs.length > 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
+                        <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
+                        <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading repairs...</span>
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                        Error loading repairs: {error}
+                      </td>
+                    </tr>
+                  ) : filteredRepairs.length > 0 ? (
                     filteredRepairs.map((r, index) => (
                       <tr key={`${r.id}-${index}`}>
                         <td style={{ fontWeight: 700, color: 'var(--primary-brand)' }}>{r.id}</td>
@@ -465,6 +566,11 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
 
             <form onSubmit={handleAddRepair}>
               <div className="modal-body">
+                {formErrors.submit && (
+                  <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', padding: '10px', borderRadius: '6px', marginBottom: '16px', fontSize: '14px' }}>
+                    {formErrors.submit}
+                  </div>
+                )}
                 <Input
                   label="Bus ID"
                   id="busId"
@@ -581,6 +687,129 @@ const FleetManagementPage = ({ user, onSignOut, fleet, setFleet, repairs, setRep
                     Save Changes
                   </Button>
                 </div>
+              </footer>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Bus Modal */}
+      {isBusModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <header className="modal-header">
+              <h2>Add New Fleet Vehicle</h2>
+              <button type="button" className="modal-close-btn" onClick={closeBusModal}>
+                <X size={18} />
+              </button>
+            </header>
+
+            <form onSubmit={handleAddBus}>
+              <div className="modal-body" style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+                {busErrors.submit && (
+                  <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', padding: '10px', borderRadius: '6px', marginBottom: '16px', fontSize: '14px', textAlign: 'left' }}>
+                    {busErrors.submit}
+                  </div>
+                )}
+
+                <div className="modal-section-title">Required Details</div>
+                <div className="modal-row-2col">
+                  <Input
+                    label="Bus Number"
+                    id="busNumber"
+                    placeholder="e.g. 201-A"
+                    value={busNumber}
+                    onChange={(e) => setBusNumber(e.target.value)}
+                    error={busErrors.busNumber}
+                    iconLeft={<Bus size={18} />}
+                    required
+                  />
+                  <Input
+                    label="Plate Number"
+                    id="plateNumber"
+                    placeholder="e.g. PP-1234"
+                    value={plateNumber}
+                    onChange={(e) => setPlateNumber(e.target.value)}
+                    error={busErrors.plateNumber}
+                    iconLeft={<FileText size={18} />}
+                    required
+                  />
+                </div>
+
+                <div className="modal-row-2col" style={{ marginTop: '12px' }}>
+                  <Input
+                    label="Capacity"
+                    id="busCapacity"
+                    type="number"
+                    placeholder="e.g. 60"
+                    value={busCapacity}
+                    onChange={(e) => setBusCapacity(e.target.value)}
+                    error={busErrors.busCapacity}
+                    iconLeft={<Users size={18} />}
+                    required
+                  />
+                  <Input
+                    label="Odometer Mileage"
+                    id="busMileage"
+                    type="number"
+                    placeholder="e.g. 12000"
+                    value={busMileage}
+                    onChange={(e) => setBusMileage(e.target.value)}
+                    error={busErrors.busMileage}
+                    iconLeft={<Wrench size={18} />}
+                  />
+                </div>
+
+                <div className="modal-section-title" style={{ marginTop: '16px' }}>Optional Vehicle Specs</div>
+                <div className="modal-row-2col">
+                  <Input
+                    label="Manufacturer"
+                    id="busManufacturer"
+                    placeholder="e.g. Blue Bird"
+                    value={busManufacturer}
+                    onChange={(e) => setBusManufacturer(e.target.value)}
+                  />
+                  <Input
+                    label="Model"
+                    id="busModel"
+                    placeholder="e.g. All American"
+                    value={busModel}
+                    onChange={(e) => setBusModel(e.target.value)}
+                  />
+                </div>
+
+                <div className="modal-row-2col" style={{ marginTop: '12px' }}>
+                  <Input
+                    label="Year"
+                    id="busYear"
+                    type="number"
+                    placeholder="e.g. 2020"
+                    value={busYear}
+                    onChange={(e) => setBusYear(e.target.value)}
+                    error={busErrors.busYear}
+                  />
+                  <Input
+                    label="Depot Location / Station"
+                    id="busDepot"
+                    placeholder="e.g. Depot North"
+                    value={busDepot}
+                    onChange={(e) => setBusDepot(e.target.value)}
+                    iconLeft={<MapPin size={18} />}
+                  />
+                </div>
+              </div>
+
+              <footer className="modal-footer">
+                <button 
+                  type="button" 
+                  className="action-btn"
+                  onClick={closeBusModal}
+                >
+                  Cancel
+                </button>
+                <Button type="submit">
+                  Add Bus
+                </Button>
               </footer>
             </form>
           </div>

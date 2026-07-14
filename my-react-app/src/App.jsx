@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import AuthPage from './features/auth/pages/AuthPage';
 import UserManagementPage from './features/dashboard/pages/UserManagementPage';
 import FleetManagementPage from './features/dashboard/pages/FleetManagementPage';
@@ -8,14 +9,22 @@ import RouteLogisticsPage from './features/dashboard/pages/RouteLogisticsPage';
 import RouteDetailPage from './features/dashboard/pages/RouteDetailPage';
 import StudentsPage from './features/dashboard/pages/StudentsPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import { INITIAL_FLEET, INITIAL_REPAIRS } from './features/dashboard/data/fleetData';
-import { INITIAL_STUDENTS } from './features/dashboard/data/studentsData';
+import { authService } from './features/auth/services/authService';
 
 function App() {
-  const [user, setUser] = useState(null);
-  const [fleet, setFleet] = useState(INITIAL_FLEET);
-  const [repairs, setRepairs] = useState(INITIAL_REPAIRS);
-  const [students, setStudents] = useState(INITIAL_STUDENTS);
+  const [user, setUser] = useState(() => authService.getCurrentUser());
+  const queryClient = useQueryClient();
+
+  const handleSignOut = async () => {
+    try {
+      await authService.logout();
+      queryClient.clear();
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      setUser(null);
+    }
+  };
 
   return (
     <BrowserRouter>
@@ -38,9 +47,7 @@ function App() {
             <ProtectedRoute user={user}>
               <StudentsPage 
                 user={user} 
-                onSignOut={() => setUser(null)} 
-                students={students}
-                setStudents={setStudents}
+                onSignOut={handleSignOut} 
               />
             </ProtectedRoute>
           } 
@@ -51,7 +58,7 @@ function App() {
           path="/users" 
           element={
             <ProtectedRoute user={user}>
-              <UserManagementPage user={user} onSignOut={() => setUser(null)} />
+              <UserManagementPage user={user} onSignOut={handleSignOut} />
             </ProtectedRoute>
           } 
         />
@@ -64,11 +71,7 @@ function App() {
             <ProtectedRoute user={user}>
               <FleetManagementPage 
                 user={user} 
-                onSignOut={() => setUser(null)} 
-                fleet={fleet}
-                setFleet={setFleet}
-                repairs={repairs}
-                setRepairs={setRepairs}
+                onSignOut={handleSignOut} 
               />
             </ProtectedRoute>
           } 
@@ -81,11 +84,7 @@ function App() {
             <ProtectedRoute user={user}>
               <BusDetailPage 
                 user={user} 
-                onSignOut={() => setUser(null)} 
-                fleet={fleet}
-                setFleet={setFleet}
-                repairs={repairs}
-                setRepairs={setRepairs}
+                onSignOut={handleSignOut} 
               />
             </ProtectedRoute>
           } 
@@ -98,7 +97,7 @@ function App() {
             <ProtectedRoute user={user}>
               <RouteLogisticsPage 
                 user={user} 
-                onSignOut={() => setUser(null)} 
+                onSignOut={handleSignOut} 
               />
             </ProtectedRoute>
           } 
@@ -111,9 +110,7 @@ function App() {
             <ProtectedRoute user={user}>
               <RouteDetailPage 
                 user={user} 
-                onSignOut={() => setUser(null)} 
-                fleet={fleet}
-                setFleet={setFleet}
+                onSignOut={handleSignOut} 
               />
             </ProtectedRoute>
           } 

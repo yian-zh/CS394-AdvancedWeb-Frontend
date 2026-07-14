@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Input from '../../../components/ui/Input';
 import Button from '../../../components/ui/Button';
+import { authService } from '../services/authService';
 
-const LoginForm = ({ onSuccess }) => {
+const LoginForm = ({ onSuccess, onForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -25,27 +26,45 @@ const LoginForm = ({ onSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
+    setErrors({});
+    try {
+      const data = await authService.login(email, password);
       if (onSuccess) {
-        onSuccess({ email, rememberMe });
+        onSuccess(data);
       }
-    }, 1500);
+    } catch (err) {
+      console.error('Login error:', err);
+      setErrors({ submit: err.message || 'Invalid email or password.' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <form onSubmit={handleSubmit} className="auth-card-body auth-fade-enter">
+      {errors.submit && (
+        <div style={{
+          padding: '10px 14px',
+          backgroundColor: '#fee2e2',
+          border: '1px solid #fca5a5',
+          borderRadius: '8px',
+          color: '#991b1b',
+          fontSize: '13px'
+        }}>
+          {errors.submit}
+        </div>
+      )}
+
       <Input
-        label="Email or Username"
+        label="Email address"
         id="email"
-        type="text"
-        placeholder="admin@district.edu"
+        type="email"
+        placeholder="example@email.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         error={errors.email}
@@ -84,7 +103,14 @@ const LoginForm = ({ onSuccess }) => {
           />
           <span>Remember me</span>
         </label>
-        <a href="#forgot" className="auth-forgot-link" onClick={(e) => e.preventDefault()}>
+        <a
+          href="#forgot"
+          className="auth-forgot-link"
+          onClick={(e) => {
+            e.preventDefault();
+            if (onForgotPassword) onForgotPassword();
+          }}
+        >
           Forgot Password?
         </a>
       </div>
