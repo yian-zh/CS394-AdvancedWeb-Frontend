@@ -1,0 +1,7 @@
+name: school-bus-management-system
+static_sites:
+  - name: my-react-app
+    source_dir: my-react-app
+    build_command: npm run build
+    output_dir: dist
+    catchall_document: index.html
