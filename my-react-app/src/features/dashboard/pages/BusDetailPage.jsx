@@ -30,21 +30,49 @@ const BusDetailPage = ({ user, onSignOut }) => {
 
     const mappedDocs = (matched.documents || []).map(d => ({
       name: d.document_type,
-      status: `Expires ${new Date(d.expiry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+      status: d.expiry_date
+        ? `Expires ${new Date(d.expiry_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+        : 'Valid'
     }));
+
+    const mappedLogs = (matched.maintenance_histories || matched.maintenanceHistories || []).map(h => ({
+      date: h.created_at
+        ? new Date(h.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'N/A',
+      type: h.service_type || h.issue || 'Service',
+      mileage: h.mileage ? h.mileage.toLocaleString() : (matched.mileage ? matched.mileage.toLocaleString() : '0'),
+      status: h.status || 'Completed'
+    }));
+
+    const capacityTotal = matched.capacity || 60;
+    const capacityUsed = Math.round(capacityTotal * 0.82);
+    const statusStr = matched.availability_status
+      ? (matched.availability_status.charAt(0).toUpperCase() + matched.availability_status.slice(1))
+      : 'Active';
 
     return {
       bus_id: matched.bus_id,
       id: `#${matched.bus_number}`,
-      model: matched.model || 'N/A',
+      model: matched.model || 'General School Bus',
       manufacturer: matched.manufacturer || 'N/A',
-      capacity: matched.capacity,
-      status: matched.status ? (matched.status.charAt(0).toUpperCase() + matched.status.slice(1)) : 'Active',
-      driver: 'John Doe',
+      makeModel: matched.manufacturer && matched.model
+        ? `${matched.manufacturer} ${matched.model}`
+        : (matched.model || 'General School Bus'),
+      year: matched.year ? String(matched.year) : 'N/A',
+      licensePlate: matched.plate_number || 'N/A',
+      fuelType: 'Diesel',
+      capacity: capacityTotal,
+      capacityTotal,
+      capacityUsed,
+      status: statusStr,
+      driver: matched.driver
+        ? `${matched.driver.first_name} ${matched.driver.last_name}`
+        : 'Unassigned',
       route: 'Unassigned',
+      fullRoute: 'Unassigned',
       mileage: matched.mileage ? `${matched.mileage.toLocaleString()} mi` : 'N/A',
-      capacityUsed: Math.round(matched.capacity * 0.82),
-      documents: mappedDocs
+      documents: mappedDocs,
+      maintenanceLogs: mappedLogs
     };
   }, [rawBuses, rawBusId]);
 
@@ -75,33 +103,17 @@ const BusDetailPage = ({ user, onSignOut }) => {
     setEditDriver(details.driver);
     setEditRoute(details.route);
     setEditMileage(details.mileage);
-    setEditCapacity(busState ? busState.capacity : 60);
+    setEditCapacity(details.capacityTotal || 60);
     setIsEditModalOpen(true);
   };
 
   const handleSaveDetails = (e) => {
     e.preventDefault();
-    const newOverrides = {
-      ...overrides,
-      driver: editDriver,
-      route: editRoute,
-      mileage: editMileage
-    };
-    localStorage.setItem(`bus_override_${busId}`, JSON.stringify(newOverrides));
-    setOverrides(newOverrides);
-
-    // Update fleet state (e.g. status and capacity)
-    const updatedFleet = fleet.map(b => {
-      if (b.id === busId) {
-        return { 
-          ...b, 
-          capacity: parseInt(editCapacity) || 0,
-          status: parseInt(editCapacity) === 0 ? 'Maintenance' : 'Active'
-        };
-      }
-      return b;
-    });
-    setFleet(updatedFleet);
+    // Save local overrides to localStorage for display purposes
+    const saved = localStorage.getItem(`bus_override_${rawBusId}`);
+    const existing = saved ? JSON.parse(saved) : {};
+    const newOverrides = { ...existing, driver: editDriver, route: editRoute, mileage: editMileage };
+    localStorage.setItem(`bus_override_${rawBusId}`, JSON.stringify(newOverrides));
     setIsEditModalOpen(false);
   };
 
@@ -110,13 +122,10 @@ const BusDetailPage = ({ user, onSignOut }) => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const newOverrides = {
-          ...overrides,
-          image: reader.result
-        };
-        localStorage.setItem(`bus_override_${busId}`, JSON.stringify(newOverrides));
-        setOverrides(newOverrides);
-        setImageError(false); // Reset error state to display the new image
+        const saved = localStorage.getItem(`bus_override_${rawBusId}`);
+        const existing = saved ? JSON.parse(saved) : {};
+        localStorage.setItem(`bus_override_${rawBusId}`, JSON.stringify({ ...existing, image: reader.result }));
+        setImageError(false);
       };
       reader.readAsDataURL(file);
     }
@@ -222,7 +231,7 @@ const BusDetailPage = ({ user, onSignOut }) => {
             <Link to="/fleet" className="back-arrow-link" style={{ color: 'var(--icon-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', border: '1px solid rgba(197, 197, 211, 0.3)', backgroundColor: '#ffffff', transition: 'all 0.2s' }}>
               <ArrowLeft size={16} />
             </Link>
-            <h2 className="top-navbar-title" style={{ fontSize: '18px', fontWeight: 700 }}>Bus {busId}</h2>
+            <h2 className="top-navbar-title" style={{ fontSize: '18px', fontWeight: 700 }}>Bus {rawBusId}</h2>
           </div>
 
           <div className="top-navbar-actions">
@@ -241,7 +250,7 @@ const BusDetailPage = ({ user, onSignOut }) => {
           <div className="canvas-header" style={{ alignItems: 'flex-start' }}>
             <div className="header-text-container" style={{ textAlign: 'left' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-                <h1 className="canvas-title" style={{ fontSize: '28px', margin: 0 }}>Bus {busId}</h1>
+                <h1 className="canvas-title" style={{ fontSize: '28px', margin: 0 }}>Bus {rawBusId}</h1>
                 <span className={`bus-card-status ${details.status === 'Maintenance' ? 'is-maintenance' : ''}`} style={{ fontSize: '13px', padding: '6px 14px' }}>
                   {details.status === 'Maintenance' ? 'Maintenance' : 'In Service'}
                 </span>
@@ -288,7 +297,7 @@ const BusDetailPage = ({ user, onSignOut }) => {
                 {!imageError ? (
                   <img 
                     src={currentImage} 
-                    alt={`Bus ${busId}`} 
+                    alt={`Bus ${rawBusId}`} 
                     className="bus-image" 
                     onError={() => setImageError(true)}
                   />
@@ -502,7 +511,7 @@ const BusDetailPage = ({ user, onSignOut }) => {
         <div className="modal-overlay">
           <div className="modal-card" style={{ maxWidth: '520px' }}>
             <header className="modal-header">
-              <h2>Edit Vehicle Details: Bus {busId}</h2>
+              <h2>Edit Vehicle Details: Bus {rawBusId}</h2>
               <button type="button" className="modal-close-btn" onClick={() => setIsEditModalOpen(false)}>
                 <ChevronLeft size={18} />
               </button>

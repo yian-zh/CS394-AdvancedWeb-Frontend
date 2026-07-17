@@ -55,7 +55,7 @@ const FleetManagementPage = ({ user, onSignOut }) => {
     return rawBuses.map(b => ({
       id: `#${b.bus_number}`,
       capacity: b.capacity,
-      status: b.status.charAt(0).toUpperCase() + b.status.slice(1)
+      status: b.availability_status ? (b.availability_status.charAt(0).toUpperCase() + b.availability_status.slice(1)) : 'Active'
     }));
   }, [rawBuses]);
 
