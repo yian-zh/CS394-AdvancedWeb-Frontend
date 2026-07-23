@@ -196,6 +196,15 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
+  async updateRoute(id, routeData) {
+    const response = await fetch(`${API_URL}/routes/${id}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(routeData),
+    });
+    return handleResponse(response);
+  },
+
   async manageStops(id, stopData) {
     const response = await fetch(`${API_URL}/routes/${id}/stops`, {
       method: 'POST',

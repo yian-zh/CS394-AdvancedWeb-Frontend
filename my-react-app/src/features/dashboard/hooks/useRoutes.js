@@ -18,6 +18,16 @@ export const useCreateRoute = () => {
   });
 };
 
+export const useUpdateRoute = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, routeData }) => dashboardService.updateRoute(id, routeData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['routes'] });
+    },
+  });
+};
+
 export const useManageStops = () => {
   const queryClient = useQueryClient();
   return useMutation({

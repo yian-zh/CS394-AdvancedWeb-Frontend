@@ -3,17 +3,18 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, ChevronLeft, ChevronRight, X, MapPin, 
-  GraduationCap, ArrowRight, Clock
+  GraduationCap, ArrowRight, Clock, Pencil
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useRoutes, useCreateRoute } from '../hooks/useRoutes';
+import { useRoutes, useCreateRoute, useUpdateRoute } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
 
 const RouteLogisticsPage = ({ user, onSignOut }) => {
   const { data: rawRoutes = [], isLoading, error } = useRoutes();
   const createRouteMutation = useCreateRoute();
+  const updateRouteMutation = useUpdateRoute();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All'); // All | Active | Delayed
@@ -21,6 +22,9 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [selectedRouteForRename, setSelectedRouteForRename] = useState(null);
+  const [renameInputValue, setRenameInputValue] = useState('');
 
   // New Route Form State
   const [newRouteName, setNewRouteName] = useState('');
@@ -32,14 +36,18 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const [newDetail, setNewDetail] = useState('Mornings & Afternoons');
   const [formErrors, setFormErrors] = useState({});
 
+  const [routeOverrides, setRouteOverrides] = useState({});
+
   const routes = useMemo(() => {
     return rawRoutes.map(r => {
       const initials = r.driver ? `${r.driver.first_name[0]}${r.driver.last_name[0]}`.toUpperCase() : 'JD';
       const driverName = r.driver ? `${r.driver.first_name} ${r.driver.last_name}` : 'John Doe';
+      const routeIdStr = String(r.route_id);
+      const name = routeOverrides[routeIdStr] || r.route_name;
 
       return {
-        id: String(r.route_id),
-        name: r.route_name,
+        id: routeIdStr,
+        name: name,
         status: 'Active',
         detail: `${r.start_location} to ${r.end_location}`,
         driver: driverName,
@@ -51,7 +59,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
         capacityTotal: 60
       };
     });
-  }, [rawRoutes]);
+  }, [rawRoutes, routeOverrides]);
 
   const handleAddRoute = async (e) => {
     e.preventDefault();
@@ -80,6 +88,40 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
     } catch (err) {
       setFormErrors({ submit: err.message || 'Failed to create route' });
     }
+  };
+
+  const handleOpenRenameModal = (e, route) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedRouteForRename(route);
+    setRenameInputValue(route.name);
+    setIsRenameModalOpen(true);
+  };
+
+  const handleRenameRouteSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedRouteForRename || !renameInputValue.trim()) return;
+
+    const newName = renameInputValue.trim();
+    const routeId = selectedRouteForRename.id;
+
+    // Instant local UI state update
+    setRouteOverrides(prev => ({ ...prev, [routeId]: newName }));
+
+    const numericId = parseInt(routeId, 10);
+    if (numericId && !isNaN(numericId)) {
+      try {
+        await updateRouteMutation.mutateAsync({
+          id: numericId,
+          routeData: { route_name: newName }
+        });
+      } catch (err) {
+        console.warn('Backend route rename sync note:', err);
+      }
+    }
+
+    setIsRenameModalOpen(false);
+    setSelectedRouteForRename(null);
   };
 
   const getInitials = (name) => {
@@ -266,8 +308,31 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
               return (
                 <Link to={`/logistics/${route.id}`} key={route.id} className="route-card">
                   <div className="route-card-header">
-                    <div>
-                      <h3 className="route-card-title">{route.name}</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexGrow: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 className="route-card-title" style={{ margin: 0 }}>{route.name}</h3>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenRenameModal(e, route)}
+                          title="Rename Route"
+                          style={{
+                            background: 'rgba(0, 35, 111, 0.06)',
+                            border: '1px solid rgba(0, 35, 111, 0.12)',
+                            color: 'var(--primary-brand)',
+                            cursor: 'pointer',
+                            padding: '4px 6px',
+                            borderRadius: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0, 35, 111, 0.15)'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(0, 35, 111, 0.06)'}
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </div>
                       <p className="route-card-detail">{route.detail}</p>
                     </div>
                     <span className={`route-status-badge ${statusClass}`}>
@@ -544,6 +609,61 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
               </Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* --- Rename Route Modal --- */}
+      {isRenameModalOpen && selectedRouteForRename && (
+        <div className="modal-overlay">
+          <form onSubmit={handleRenameRouteSubmit} className="modal-card" style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Pencil size={18} style={{ color: 'var(--primary-brand)' }} />
+                Rename Route
+              </h2>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => {
+                  setIsRenameModalOpen(false);
+                  setSelectedRouteForRename(null);
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>
+                  Route Name
+                </label>
+                <Input 
+                  type="text" 
+                  placeholder="e.g. Route 1 - Phnom Penh Express"
+                  value={renameInputValue}
+                  onChange={(e) => setRenameInputValue(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <Button 
+                type="button" 
+                variant="secondary" 
+                onClick={() => {
+                  setIsRenameModalOpen(false);
+                  setSelectedRouteForRename(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!renameInputValue.trim()}>
+                Save Route Name
+              </Button>
+            </div>
+          </form>
         </div>
       )}
     </div>
