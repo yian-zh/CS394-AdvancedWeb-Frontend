@@ -3,22 +3,26 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, MapPin, CloudUpload,
-  GraduationCap
+  GraduationCap, AlertTriangle, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useUsers, useCreateUser, useDeleteUser } from '../hooks/useUsers';
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
+import { Edit3 } from 'lucide-react';
 import '../styles/dashboard.css';
 
 const UserManagementPage = ({ user, onSignOut }) => {
   const { data: rawUsers = [], isLoading, error } = useUsers();
   const createUserMutation = useCreateUser();
+  const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('All Users');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'
+  const [selectedUserIdToEdit, setSelectedUserIdToEdit] = useState(null);
 
   // Delete Confirmation State
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -99,6 +103,39 @@ const UserManagementPage = ({ user, onSignOut }) => {
     );
   });
 
+  const openAddModal = () => {
+    setModalMode('add');
+    setSelectedUserIdToEdit(null);
+    setNewUserRole('Driver');
+    setNewUserFirstName('');
+    setNewUserLastName('');
+    setNewUserGender('Male');
+    setNewUserPhone('');
+    setNewUserUsername('');
+    setNewUserEmail('');
+    setNewUserPassword('');
+    setNewUserConfirmPassword('');
+    setFormErrors({});
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (usr) => {
+    setModalMode('edit');
+    setSelectedUserIdToEdit(usr.id);
+    const names = (usr.name || '').split(' ');
+    setNewUserRole(usr.role === 'Admin' ? 'Administrator' : usr.role);
+    setNewUserFirstName(names[0] || '');
+    setNewUserLastName(names.slice(1).join(' ') || '');
+    setNewUserGender('Male');
+    setNewUserPhone(usr.phone && usr.phone !== 'N/A' ? usr.phone : '');
+    setNewUserUsername(usr.email ? usr.email.split('@')[0] : '');
+    setNewUserEmail(usr.email || '');
+    setNewUserPassword('');
+    setNewUserConfirmPassword('');
+    setFormErrors({});
+    setIsModalOpen(true);
+  };
+
   // Handle Form Submission
   const validateForm = () => {
     const errors = {};
@@ -111,13 +148,16 @@ const UserManagementPage = ({ user, onSignOut }) => {
     } else if (!/\S+@\S+\.\S+/.test(newUserEmail)) {
       errors.email = 'Email is invalid';
     }
-    if (!newUserPassword) {
-      errors.password = 'Password is required';
-    } else if (newUserPassword.length < 6) {
-      errors.password = 'Password must be at least 6 characters';
-    }
-    if (newUserPassword !== newUserConfirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
+    if (modalMode === 'add') {
+      if (!newUserPassword) {
+        errors.password = 'Password is required';
+      } else if (newUserPassword.length < 8) {
+        errors.password = 'Password must be at least 8 characters long.';
+      }
+    } else if (newUserPassword) {
+      if (newUserPassword.length < 8) {
+        errors.password = 'Password must be at least 8 characters long.';
+      }
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -136,14 +176,29 @@ const UserManagementPage = ({ user, onSignOut }) => {
         last_name: newUserLastName.trim(),
         gender: newUserGender.toLowerCase(),
         email: newUserEmail.trim(),
-        password: newUserPassword,
         phone_number: newUserPhone.trim()
       };
 
-      await createUserMutation.mutateAsync(userData);
+      if (newUserPassword) {
+        userData.password = newUserPassword;
+      }
+
+      if (modalMode === 'add') {
+        await createUserMutation.mutateAsync(userData);
+      } else {
+        await updateUserMutation.mutateAsync({ id: selectedUserIdToEdit, userData });
+      }
+
       closeModal();
     } catch (err) {
-      setFormErrors(prev => ({ ...prev, submit: err.message || 'Failed to create user' }));
+      const passwordErrMsg = err.data?.errors?.password ? err.data.errors.password[0] : null;
+      const errMsg = passwordErrMsg || err.message || 'Failed to save user account';
+      
+      if (passwordErrMsg || errMsg.toLowerCase().includes('password')) {
+        setFormErrors(prev => ({ ...prev, password: errMsg, submit: null }));
+      } else {
+        setFormErrors(prev => ({ ...prev, submit: errMsg }));
+      }
     }
   };
 
@@ -190,6 +245,10 @@ const UserManagementPage = ({ user, onSignOut }) => {
           <Link to="/logistics" className="sidebar-link">
             <MapPin size={18} />
             Route Logistics
+          </Link>
+          <Link to="/finance" className="sidebar-link">
+            <DollarSign size={18} />
+            Finance
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />
@@ -254,7 +313,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
             <button 
               type="button" 
               className="add-user-btn"
-              onClick={() => setIsModalOpen(true)}
+              onClick={openAddModal}
             >
               <Plus size={16} />
               Add User
@@ -302,19 +361,20 @@ const UserManagementPage = ({ user, onSignOut }) => {
                     <th>Role</th>
                     <th>Contact</th>
                     <th>Assignment</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan="4" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
                         <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
                         <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading users...</span>
                       </td>
                     </tr>
                   ) : error ? (
                     <tr>
-                      <td colSpan="4" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
                         Error loading users: {error}
                       </td>
                     </tr>
@@ -355,31 +415,42 @@ const UserManagementPage = ({ user, onSignOut }) => {
                             )}
                           </div>
                         </td>
-                        <td>
-                          <button
-                            type="button"
-                            title="Delete User"
-                            onClick={() => { setUserToDelete(u); setIsDeleteConfirmOpen(true); }}
-                            style={{
-                              background: 'none',
-                              border: '1px solid #fca5a5',
-                              borderRadius: '6px',
-                              color: '#ef4444',
-                              cursor: 'pointer',
-                              padding: '4px 10px',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              transition: 'all 0.15s',
-                            }}
-                          >
-                            Delete
-                          </button>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              className="action-btn"
+                              onClick={() => openEditModal(u)}
+                              style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Edit User Details"
+                            >
+                              <Edit3 size={13} /> Edit
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete User"
+                              onClick={() => { setUserToDelete(u); setIsDeleteConfirmOpen(true); }}
+                              style={{
+                                background: 'none',
+                                border: '1px solid #fca5a5',
+                                borderRadius: '6px',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                padding: '4px 10px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="4" style={{ textAlign: 'center', padding: '32px', color: 'var(--icon-color)' }}>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: 'var(--icon-color)' }}>
                         No users found matching the search query or filter.
                       </td>
                     </tr>
@@ -415,7 +486,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
         <div className="modal-overlay">
           <div className="modal-card">
             <header className="modal-header">
-              <h2>Add New System User</h2>
+              <h2>{modalMode === 'add' ? 'Add New System User' : 'Edit System User'}</h2>
               <button type="button" className="modal-close-btn" onClick={closeModal}>
                 <X size={18} />
               </button>
@@ -510,24 +581,15 @@ const UserManagementPage = ({ user, onSignOut }) => {
                   />
                 </div>
 
-                <div className="modal-row-2col" style={{ marginTop: '12px' }}>
+                <div style={{ marginTop: '12px' }}>
                   <Input
-                    label="Password"
+                    label={modalMode === 'add' ? 'Password' : 'New Password (leave empty to keep current)'}
                     id="modalPassword"
                     type="password"
-                    placeholder="••••••••"
+                    placeholder={modalMode === 'add' ? 'Enter initial user password' : 'Enter new password to update user'}
                     value={newUserPassword}
                     onChange={(e) => setNewUserPassword(e.target.value)}
                     error={formErrors.password}
-                  />
-                  <Input
-                    label="Confirm Password"
-                    id="modalConfirmPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    value={newUserConfirmPassword}
-                    onChange={(e) => setNewUserConfirmPassword(e.target.value)}
-                    error={formErrors.confirmPassword}
                   />
                 </div>
 
@@ -554,7 +616,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
                   Cancel
                 </button>
                 <Button type="submit">
-                  Create User
+                  {modalMode === 'add' ? 'Create User' : 'Save Changes'}
                 </Button>
               </footer>
             </form>

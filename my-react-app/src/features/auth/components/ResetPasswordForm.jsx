@@ -101,7 +101,6 @@ const ResetPasswordForm = ({ initialEmail = '', initialToken = '', onSuccess, on
         label="New Password"
         id="new-password"
         type={showPassword ? 'text' : 'password'}
-        placeholder="••••••••"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         error={errors.password}
@@ -123,7 +122,6 @@ const ResetPasswordForm = ({ initialEmail = '', initialToken = '', onSuccess, on
         label="Confirm New Password"
         id="confirm-password"
         type={showPassword ? 'text' : 'password'}
-        placeholder="••••••••"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
         error={errors.confirmPassword}

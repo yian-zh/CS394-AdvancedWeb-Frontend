@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, 
-  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, Filter, MapPin
+  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, Filter, MapPin, CheckCircle2, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
 import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent } from '../hooks/useStudents';
+import { useUsers } from '../hooks/useUsers';
+import { useRoutes } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
 
 // Initial stats for Bento grid (static text as in Figma but dynamic total count)
@@ -20,6 +22,8 @@ const BASE_STATS = {
 
 const StudentsPage = ({ user, onSignOut }) => {
   const { data: rawStudents = [], isLoading, error } = useStudents();
+  const { data: rawUsers = [] } = useUsers();
+  const { data: rawRoutes = [] } = useRoutes();
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
@@ -40,9 +44,14 @@ const StudentsPage = ({ user, onSignOut }) => {
       const guardianNameStr = guardianUser ? `${guardianUser.first_name} ${guardianUser.last_name}` : 'No Guardian';
       const guardianPhoneStr = guardianUser ? guardianUser.phone_number : 'N/A';
       
-      // Route details
-      const stopObj = s.stops && s.stops.length > 0 ? s.stops[0] : null;
-      const assignedRouteStr = stopObj ? (stopObj.route_name || stopObj.name || `Route #${stopObj.route_id || stopObj.id}`) : 'Unassigned';
+      // Route details: Pick the latest assigned route stop
+      const latestStop = (s.stops && s.stops.length > 0)
+        ? [...s.stops].sort((a, b) => (b.pivot?.student_stop_id || b.route_id || 0) - (a.pivot?.student_stop_id || a.route_id || 0))[0]
+        : null;
+
+      const assignedRouteStr = latestStop 
+        ? (latestStop.route_name || latestStop.name || `Route #${latestStop.route_id || latestStop.id}`) 
+        : 'Unassigned';
 
       return {
         id: String(s.student_id),
@@ -57,10 +66,84 @@ const StudentsPage = ({ user, onSignOut }) => {
     });
   }, [rawStudents]);
 
+  // Registered Guardians List fetched dynamically from the API (GET /api/users & GET /api/students)
+  const registeredGuardians = useMemo(() => {
+    const list = [];
+    const nameSet = new Set();
+
+    // 1. Guardians fetched directly from API endpoint: GET /api/users
+    rawUsers.forEach((u) => {
+      const roleStr = (u.role || '').toLowerCase();
+      if (!roleStr || roleStr === 'guardian' || roleStr === 'parent') {
+        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.name || u.username;
+        if (fullName && !nameSet.has(fullName)) {
+          nameSet.add(fullName);
+          list.push({
+            id: u.user_id || u.id,
+            name: fullName,
+            phone: u.phone_number || u.phone || '',
+          });
+        }
+      }
+    });
+
+    // 2. Guardians linked to student records from API endpoint: GET /api/students
+    rawStudents.forEach((s) => {
+      const primaryGuardian = s.guardians && s.guardians[0];
+      const gUser = primaryGuardian && primaryGuardian.user;
+      const gName = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || null);
+      const gPhone = gUser ? gUser.phone_number : (s.phone || '');
+      if (gName && gName !== 'No Guardian' && !nameSet.has(gName)) {
+        nameSet.add(gName);
+        list.push({
+          id: `stu-g-${s.student_id || s.id}`,
+          name: gName,
+          phone: gPhone || '',
+        });
+      }
+    });
+
+    // 3. Initial seed data if database has no registered user records yet
+    if (list.length === 0) {
+      const fallbacks = [
+        { name: 'Sarah Johnson', phone: '555-0201' },
+        { name: 'James Brown', phone: '555-0202' },
+        { name: 'Michael Davis', phone: '555-0203' },
+        { name: 'Robert Wilson', phone: '555-0204' },
+        { name: 'Linda Martinez', phone: '555-0205' },
+        { name: 'David Taylor', phone: '555-0206' },
+        { name: 'Karen Anderson', phone: '555-0207' },
+        { name: 'Joseph Thomas', phone: '555-0208' },
+      ];
+
+      fallbacks.forEach((fb) => {
+        if (!nameSet.has(fb.name)) {
+          nameSet.add(fb.name);
+          list.push(fb);
+        }
+      });
+    }
+
+    return list;
+  }, [rawUsers, rawStudents]);
+
+  const handleGuardianSelect = (selectedName) => {
+    setGuardianName(selectedName);
+    const found = registeredGuardians.find((g) => g.name === selectedName);
+    if (found && found.phone && found.phone !== 'N/A') {
+      setPhone(found.phone);
+    }
+  };
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'
   const [selectedStudentId, setSelectedStudentId] = useState(null);
+
+  // Notification & Submit state
+  const [notificationBanner, setNotificationBanner] = useState(null);
+  const [initialFormState, setInitialFormState] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form Fields State
   const [firstName, setFirstName] = useState('');
@@ -96,21 +179,46 @@ const StudentsPage = ({ user, onSignOut }) => {
     return 'badge-route-unassigned';
   };
 
-  // Calculate dynamic stats
+  // Calculate real stats directly from backend API dataset
   const stats = useMemo(() => {
-    // Total is mock (1284) plus/minus any change in student length relative to original
-    const delta = students.length - 8;
-    const total = 1284 + delta;
-    const enrolled = 1240 + delta;
-    const transport = 912 + students.filter(s => s.assignedRoute !== 'Unassigned').length - students.filter(s => s.assignedRoute !== 'Unassigned').length; // simple scale
-    
+    const totalCount = rawStudents.length;
+
+    // Active Enrolled Students
+    const enrolledCount = rawStudents.filter(s => 
+      !s.enrollment_status || s.enrollment_status.toLowerCase() === 'active'
+    ).length;
+    const enrollmentRate = totalCount > 0 ? ((enrolledCount / totalCount) * 100).toFixed(1) : '100.0';
+
+    // Suspended / Inactive Accounts
+    const suspendedCount = rawStudents.filter(s => 
+      s.enrollment_status && (s.enrollment_status.toLowerCase() === 'suspended' || s.enrollment_status.toLowerCase() === 'inactive')
+    ).length;
+
+    // Transport Users (Students with assigned route or bus stop)
+    const transportCount = rawStudents.filter(s => {
+      const hasStops = s.stops && Array.isArray(s.stops) && s.stops.length > 0;
+      return hasStops;
+    }).length;
+
     return {
-      totalStudents: { value: total.toLocaleString(), change: '+12% from last term' },
-      currentlyEnrolled: { value: enrolled.toLocaleString(), rate: BASE_STATS.currentlyEnrolled.rate },
-      suspendedAccounts: { value: BASE_STATS.suspendedAccounts.value, status: BASE_STATS.suspendedAccounts.status },
-      transportUsers: { value: (912 + delta).toLocaleString(), status: BASE_STATS.transportUsers.status }
+      totalStudents: { 
+        value: totalCount.toLocaleString(), 
+        change: totalCount > 0 ? `${totalCount} Total Student Records` : 'No Records'
+      },
+      currentlyEnrolled: { 
+        value: enrolledCount.toLocaleString(), 
+        rate: `${enrollmentRate}% Enrollment rate` 
+      },
+      suspendedAccounts: { 
+        value: suspendedCount.toString(), 
+        status: suspendedCount > 0 ? 'Requires administrative review' : 'No suspended accounts' 
+      },
+      transportUsers: { 
+        value: transportCount.toLocaleString(), 
+        status: `${transportCount} Active bus stop assignments` 
+      }
     };
-  }, [students]);
+  }, [rawStudents]);
 
   // Search & Filter logic
   const filteredStudents = useMemo(() => {
@@ -152,6 +260,7 @@ const StudentsPage = ({ user, onSignOut }) => {
     setGender('Male');
     setPhone('');
     setFormErrors({});
+    setInitialFormState(null);
     setIsModalOpen(true);
   };
 
@@ -159,23 +268,46 @@ const StudentsPage = ({ user, onSignOut }) => {
     setModalMode('edit');
     setSelectedStudentId(student.id);
     const names = student.name.split(' ');
-    setFirstName(names[0] || '');
-    setLastName(names.slice(1).join(' ') || '');
-    setGuardianName(student.guardianName || '');
-    setGrade(student.grade || 'Grade 10');
-    setAssignedRoute(student.assignedRoute || 'Unassigned');
-    setGender(student.gender || 'Male');
-    setPhone(student.phone || '');
+    const fName = names[0] || '';
+    const lName = names.slice(1).join(' ') || '';
+    const gName = student.guardianName || '';
+    const gr = student.grade || 'Grade 10';
+    const route = student.assignedRoute || 'Unassigned';
+    const gnd = student.gender || 'Male';
+    const ph = student.phone || '';
+
+    setFirstName(fName);
+    setLastName(lName);
+    setGuardianName(gName);
+    setGrade(gr);
+    setAssignedRoute(route);
+    setGender(gnd);
+    setPhone(ph);
     setFormErrors({});
+
+    setInitialFormState({
+      name: student.name,
+      firstName: fName,
+      lastName: lName,
+      guardianName: gName,
+      grade: gr,
+      assignedRoute: route,
+      gender: gnd,
+      phone: ph,
+    });
+
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
+    if (isSubmitting || updateStudentMutation.isPending || createStudentMutation.isPending) return;
     setIsModalOpen(false);
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting || updateStudentMutation.isPending || createStudentMutation.isPending) return;
+
     const errors = {};
     if (!firstName.trim()) errors.firstName = 'First Name is required';
     if (!lastName.trim()) errors.lastName = 'Last Name is required';
@@ -187,7 +319,11 @@ const StudentsPage = ({ user, onSignOut }) => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
+      const selectedGuardianObj = registeredGuardians.find((g) => g.name === guardianName.trim());
+      const guardianUserId = selectedGuardianObj && typeof selectedGuardianObj.id === 'number' ? selectedGuardianObj.id : null;
+
       const studentData = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -197,16 +333,67 @@ const StudentsPage = ({ user, onSignOut }) => {
         grade_level: grade,
         pickup_add: 'Pickup Address',
         dropoff_add: 'Dropoff Address',
+        guardian_name: guardianName.trim(),
+        guardian_user_id: guardianUserId,
       };
 
       if (modalMode === 'add') {
         await createStudentMutation.mutateAsync(studentData);
+        setNotificationBanner({
+          type: 'success',
+          title: 'New Student Record Created',
+          studentName: `${firstName.trim()} ${lastName.trim()}`,
+          changesList: [
+            { field: 'Student Name', oldVal: null, newVal: `${firstName.trim()} ${lastName.trim()}` },
+            { field: 'Grade', oldVal: null, newVal: grade },
+            { field: 'Guardian', oldVal: null, newVal: guardianName.trim() },
+          ],
+        });
       } else {
         await updateStudentMutation.mutateAsync({ id: selectedStudentId, studentData });
+
+        // Calculate exact diffs between initial form state and submitted values
+        const changesList = [];
+        if (initialFormState) {
+          if (initialFormState.firstName !== firstName.trim()) {
+            changesList.push({ field: 'First Name', oldVal: initialFormState.firstName, newVal: firstName.trim() });
+          }
+          if (initialFormState.lastName !== lastName.trim()) {
+            changesList.push({ field: 'Last Name', oldVal: initialFormState.lastName, newVal: lastName.trim() });
+          }
+          if (initialFormState.gender !== gender) {
+            changesList.push({ field: 'Gender', oldVal: initialFormState.gender, newVal: gender });
+          }
+          if (initialFormState.grade !== grade) {
+            changesList.push({ field: 'Grade', oldVal: initialFormState.grade, newVal: grade });
+          }
+          if (initialFormState.guardianName !== guardianName.trim()) {
+            changesList.push({ field: 'Guardian Name', oldVal: initialFormState.guardianName, newVal: guardianName.trim() });
+          }
+          if (initialFormState.phone !== phone.trim()) {
+            changesList.push({ field: 'Contact Phone', oldVal: initialFormState.phone, newVal: phone.trim() });
+          }
+          if (initialFormState.assignedRoute !== assignedRoute) {
+            changesList.push({ field: 'Assigned Route', oldVal: initialFormState.assignedRoute, newVal: assignedRoute });
+          }
+        }
+
+        const studentFullName = `${firstName.trim()} ${lastName.trim()}`;
+        setNotificationBanner({
+          type: 'success',
+          title: `Information Updated for ${studentFullName}`,
+          studentName: studentFullName,
+          changesList: changesList.length > 0 ? changesList : [
+            { field: 'Status', oldVal: 'Pending', newVal: 'Saved & Synchronized' }
+          ],
+        });
       }
+
       setIsModalOpen(false);
     } catch (err) {
       setFormErrors(prev => ({ ...prev, submit: err.message || 'Failed to save student details' }));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -257,6 +444,10 @@ const StudentsPage = ({ user, onSignOut }) => {
           <Link to="/logistics" className="sidebar-link">
             <MapPin size={18} />
             Route Logistics
+          </Link>
+          <Link to="/finance" className="sidebar-link">
+            <DollarSign size={18} />
+            Finance
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />
@@ -313,6 +504,52 @@ const StudentsPage = ({ user, onSignOut }) => {
 
         {/* Content Canvas */}
         <div className="content-canvas">
+          {/* Notification Banner displaying student info changes */}
+          {notificationBanner && (
+            <div className="changes-banner">
+              <div className="changes-banner-header">
+                <div className="changes-banner-title-group">
+                  <div className="changes-banner-icon">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div>
+                    <h4 className="changes-banner-title">{notificationBanner.title}</h4>
+                    <p className="changes-banner-sub">
+                      {notificationBanner.changesList && notificationBanner.changesList.length > 0 
+                        ? `The following ${notificationBanner.changesList.length} change(s) were successfully saved:`
+                        : 'Student record updated successfully.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="changes-banner-close"
+                  onClick={() => setNotificationBanner(null)}
+                  title="Dismiss notification"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {notificationBanner.changesList && notificationBanner.changesList.length > 0 && (
+                <div className="changes-banner-list">
+                  {notificationBanner.changesList.map((c, index) => (
+                    <div key={index} className="changes-banner-item">
+                      <span className="change-field-label">{c.field}:</span>
+                      {c.oldVal ? (
+                        <>
+                          <span className="change-old-val">{c.oldVal}</span>
+                          <span className="change-arrow">&rarr;</span>
+                        </>
+                      ) : null}
+                      <span className="change-new-val">{c.newVal}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Page Header */}
           <div className="canvas-header">
             <div className="header-text-container">
@@ -377,24 +614,24 @@ const StudentsPage = ({ user, onSignOut }) => {
               </button>
               <button 
                 type="button" 
+                className={`filter-tab ${gradeFilter === 'Grade 1' ? 'is-active' : ''}`}
+                onClick={() => { setGradeFilter('Grade 1'); setCurrentPage(1); }}
+              >
+                Grade 1
+              </button>
+              <button 
+                type="button" 
+                className={`filter-tab ${gradeFilter === 'Grade 5' ? 'is-active' : ''}`}
+                onClick={() => { setGradeFilter('Grade 5'); setCurrentPage(1); }}
+              >
+                Grade 5
+              </button>
+              <button 
+                type="button" 
                 className={`filter-tab ${gradeFilter === 'Grade 9' ? 'is-active' : ''}`}
                 onClick={() => { setGradeFilter('Grade 9'); setCurrentPage(1); }}
               >
                 Grade 9
-              </button>
-              <button 
-                type="button" 
-                className={`filter-tab ${gradeFilter === 'Grade 10' ? 'is-active' : ''}`}
-                onClick={() => { setGradeFilter('Grade 10'); setCurrentPage(1); }}
-              >
-                Grade 10
-              </button>
-              <button 
-                type="button" 
-                className={`filter-tab ${gradeFilter === 'Grade 11' ? 'is-active' : ''}`}
-                onClick={() => { setGradeFilter('Grade 11'); setCurrentPage(1); }}
-              >
-                Grade 11
               </button>
               <button 
                 type="button" 
@@ -407,6 +644,19 @@ const StudentsPage = ({ user, onSignOut }) => {
 
             <div className="filters-actions">
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {/* Grade filter selector covering Grades 1 to 12 */}
+                <select 
+                  className="select-input" 
+                  style={{ padding: '6px 28px 6px 12px', fontSize: '13px', width: '140px', height: '36px', backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%235c5f62\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")', backgroundPosition: 'right 8px center', backgroundSize: '12px' }}
+                  value={gradeFilter}
+                  onChange={(e) => { setGradeFilter(e.target.value); setCurrentPage(1); }}
+                >
+                  <option value="All">All Grades</option>
+                  {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+
                 {/* Route filter selector */}
                 <select 
                   className="select-input" 
@@ -415,10 +665,15 @@ const StudentsPage = ({ user, onSignOut }) => {
                   onChange={(e) => { setRouteFilter(e.target.value); setCurrentPage(1); }}
                 >
                   <option value="All">All Routes</option>
-                  <option value="Route 1">Route 1</option>
-                  <option value="Route 2">Route 2</option>
-                  <option value="Route 4">Route 4</option>
                   <option value="Unassigned">Unassigned</option>
+                  {rawRoutes.map((r) => {
+                    const routeName = r.route_name || r.name || `Route #${r.route_id || r.id}`;
+                    return (
+                      <option key={r.route_id || r.id} value={routeName}>
+                        {routeName}
+                      </option>
+                    );
+                  })}
                 </select>
 
                 <button type="button" className="action-btn" onClick={() => alert('Exporting student directory CSV...')}>
@@ -617,30 +872,40 @@ const StudentsPage = ({ user, onSignOut }) => {
                   </div>
 
                   <div className="select-input-wrapper">
-                    <label htmlFor="studentGrade" className="ui-input-label">Grade</label>
+                    <label htmlFor="studentGrade" className="ui-input-label">Grade Level</label>
                     <select
                       id="studentGrade"
                       className="select-input"
                       value={grade}
                       onChange={(e) => setGrade(e.target.value)}
                     >
-                      <option value="Grade 9">Grade 9</option>
-                      <option value="Grade 10">Grade 10</option>
-                      <option value="Grade 11">Grade 11</option>
-                      <option value="Grade 12">Grade 12</option>
+                      {Array.from({ length: 12 }, (_, i) => `Grade ${i + 1}`).map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
 
                 <div className="modal-section-title">Guardian & Contact</div>
-                <Input
-                  label="Guardian Full Name"
-                  id="guardianFullName"
-                  placeholder="e.g. Sarah Johnson"
-                  value={guardianName}
-                  onChange={(e) => setGuardianName(e.target.value)}
-                  error={formErrors.guardianName}
-                />
+                <div className="select-input-wrapper">
+                  <label htmlFor="guardianSelect" className="ui-input-label">Select Registered Guardian</label>
+                  <select
+                    id="guardianSelect"
+                    className={`select-input ${formErrors.guardianName ? 'is-invalid' : ''}`}
+                    value={guardianName}
+                    onChange={(e) => handleGuardianSelect(e.target.value)}
+                  >
+                    <option value="">-- Select Registered Guardian --</option>
+                    {registeredGuardians.map((g, idx) => (
+                      <option key={g.id || idx} value={g.name}>
+                        {g.name} {g.phone && g.phone !== 'N/A' ? `(${g.phone})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {formErrors.guardianName && (
+                    <span className="ui-input-error">{formErrors.guardianName}</span>
+                  )}
+                </div>
 
                 <div className="modal-row-2col">
                   <Input
@@ -653,18 +918,19 @@ const StudentsPage = ({ user, onSignOut }) => {
                   />
 
                   <div className="select-input-wrapper">
-                    <label htmlFor="assignedRoute" className="ui-input-label">Assigned Route</label>
-                    <select
+                    <label htmlFor="assignedRoute" className="ui-input-label">Assigned Route (Read Only)</label>
+                    <input
                       id="assignedRoute"
+                      type="text"
                       className="select-input"
+                      style={{ backgroundColor: '#f8fafc', color: '#475569', cursor: 'not-allowed' }}
                       value={assignedRoute}
-                      onChange={(e) => setAssignedRoute(e.target.value)}
-                    >
-                      <option value="Unassigned">Unassigned</option>
-                      <option value="Route 1">Route 1</option>
-                      <option value="Route 2">Route 2</option>
-                      <option value="Route 4">Route 4</option>
-                    </select>
+                      disabled
+                      readOnly
+                    />
+                    <span style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', display: 'block' }}>
+                      Route assignments are managed automatically via Route Stop Logistics.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -674,14 +940,19 @@ const StudentsPage = ({ user, onSignOut }) => {
                   type="button" 
                   variant="outline" 
                   onClick={closeModal}
+                  disabled={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending}
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   variant="primary"
+                  disabled={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending}
+                  isLoading={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending}
                 >
-                  {modalMode === 'add' ? 'Add Student' : 'Save Changes'}
+                  {isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending
+                    ? (modalMode === 'add' ? 'Adding Student...' : 'Saving Changes...')
+                    : (modalMode === 'add' ? 'Add Student' : 'Save Changes')}
                 </Button>
               </div>
             </form>

@@ -24,6 +24,7 @@ export const useUpdateRoute = () => {
     mutationFn: ({ id, routeData }) => dashboardService.updateRoute(id, routeData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['routes'] });
+      queryClient.invalidateQueries({ queryKey: ['buses'] });
     },
   });
 };

@@ -76,7 +76,6 @@ const LoginForm = ({ onSuccess, onForgotPassword }) => {
         label="Password"
         id="password"
         type={showPassword ? 'text' : 'password'}
-        placeholder="••••••••"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         error={errors.password}

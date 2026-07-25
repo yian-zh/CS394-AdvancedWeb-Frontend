@@ -18,6 +18,16 @@ export const useCreateUser = () => {
   });
 };
 
+export const useUpdateUser = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userData }) => dashboardService.updateUser(id, userData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+};
+
 export const useToggleUserStatus = () => {
   const queryClient = useQueryClient();
   return useMutation({

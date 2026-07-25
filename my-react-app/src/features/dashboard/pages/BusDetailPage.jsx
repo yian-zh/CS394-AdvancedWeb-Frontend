@@ -4,12 +4,13 @@ import {
   Bus, Users, LogOut, Search, ChevronLeft, Wrench, Calendar, 
   AlertTriangle, MapPin, SlidersHorizontal, Download, FileText, 
   FileCheck, Edit, ArrowLeft, ArrowUpRight, Gauge, Milestone,
-  Camera, Plus, GraduationCap
+  Camera, Plus, GraduationCap, DollarSign
 } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
 import { useBuses, useUploadBusDocument, useUpdateBus } from '../hooks/useFleet';
+import { useRoutes } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
 
 // Fallback school bus image in assets
@@ -20,6 +21,7 @@ const BusDetailPage = ({ user, onSignOut }) => {
   const navigate = useNavigate();
 
   const { data: rawBuses = [], isLoading, error } = useBuses();
+  const { data: rawRoutes = [] } = useRoutes();
   const uploadBusDocumentMutation = useUploadBusDocument();
   const updateBusMutation = useUpdateBus();
   const [imageError, setImageError] = useState(false);
@@ -63,6 +65,54 @@ const BusDetailPage = ({ user, onSignOut }) => {
       ? (matched.availability_status.charAt(0).toUpperCase() + matched.availability_status.slice(1))
       : 'Active';
 
+    const activeRouteObj = matched.routes && matched.routes.length > 0 ? matched.routes[matched.routes.length - 1] : null;
+    const routeStr = activeRouteObj ? (activeRouteObj.route_name || activeRouteObj.name || `Route #${activeRouteObj.route_id || activeRouteObj.id}`) : 'Unassigned';
+
+    const matchedFullRoute = activeRouteObj 
+      ? rawRoutes.find(r => String(r.route_id || r.id) === String(activeRouteObj.route_id || activeRouteObj.id))
+      : null;
+
+    const activeDriverAssignment = matched.assignments && matched.assignments.length > 0 ? matched.assignments[matched.assignments.length - 1] : null;
+    const directDriverUser = activeDriverAssignment 
+      ? (activeDriverAssignment.driver ? activeDriverAssignment.driver.user : activeDriverAssignment.user)
+      : null;
+
+    const routeDriverUser = (matchedFullRoute && matchedFullRoute.driver)
+      ? matchedFullRoute.driver
+      : (activeRouteObj ? activeRouteObj.driver : null);
+
+    const driverUser = directDriverUser || routeDriverUser;
+
+    const routeIdKey = activeRouteObj ? (activeRouteObj.route_id || activeRouteObj.id) : null;
+    const localStorageRouteDriver = routeIdKey ? (localStorage.getItem(`sbms_route_driver_${routeIdKey}`) || localStorage.getItem(`sbms_route_driver_route-${routeIdKey}`)) : null;
+    const localStorageBusOverride = localStorage.getItem(`bus_override_#${matched.bus_number}`) || localStorage.getItem(`bus_override_${cleanId}`);
+    let busOverrideDriver = null;
+    if (localStorageBusOverride) {
+      try {
+        const parsed = JSON.parse(localStorageBusOverride);
+        busOverrideDriver = parsed.driver || null;
+      } catch (e) {}
+    }
+
+    let driverStr = 'Unassigned';
+    if (driverUser) {
+      if (typeof driverUser === 'string') {
+        driverStr = driverUser;
+      } else if (driverUser.first_name || driverUser.last_name) {
+        driverStr = `${driverUser.first_name || ''} ${driverUser.last_name || ''}`.trim();
+      } else if (driverUser.name) {
+        driverStr = driverUser.name;
+      }
+    } else if (localStorageRouteDriver) {
+      driverStr = localStorageRouteDriver;
+    } else if (busOverrideDriver) {
+      driverStr = busOverrideDriver;
+    } else if (matched.driver) {
+      driverStr = typeof matched.driver === 'string'
+        ? matched.driver
+        : `${matched.driver.first_name || ''} ${matched.driver.last_name || ''}`.trim();
+    }
+
     return {
       bus_id: matched.bus_id,
       id: `#${matched.bus_number}`,
@@ -78,16 +128,14 @@ const BusDetailPage = ({ user, onSignOut }) => {
       capacityTotal,
       capacityUsed,
       status: statusStr,
-      driver: matched.driver
-        ? `${matched.driver.first_name} ${matched.driver.last_name}`
-        : 'Unassigned',
-      route: 'Unassigned',
-      fullRoute: 'Unassigned',
+      driver: driverStr,
+      route: routeStr,
+      fullRoute: routeStr,
       mileage: matched.mileage ? `${matched.mileage.toLocaleString()} mi` : 'N/A',
       documents: mappedDocs,
       maintenanceLogs: mappedLogs
     };
-  }, [rawBuses, rawBusId]);
+  }, [rawBuses, rawRoutes, rawBusId]);
 
   if (isLoading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--primary-brand)', fontSize: '18px' }}>Loading bus details...</div>;
@@ -208,6 +256,10 @@ const BusDetailPage = ({ user, onSignOut }) => {
           <Link to="/logistics" className="sidebar-link">
             <MapPin size={18} />
             Route Logistics
+          </Link>
+          <Link to="/finance" className="sidebar-link">
+            <DollarSign size={18} />
+            Finance
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

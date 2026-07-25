@@ -78,7 +78,6 @@ const RegisterForm = ({ onSuccess }) => {
         label="Password"
         id="password"
         type={showPassword ? 'text' : 'password'}
-        placeholder="••••••••"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         error={errors.password}
@@ -100,7 +99,6 @@ const RegisterForm = ({ onSuccess }) => {
         label="Confirm Password"
         id="confirmPassword"
         type={showPassword ? 'text' : 'password'}
-        placeholder="••••••••"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
         error={errors.confirmPassword}

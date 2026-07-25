@@ -263,5 +263,68 @@ export const dashboardService = {
       body: JSON.stringify(assignmentData),
     });
     return handleResponse(response);
+  },
+
+  // ==========================================
+  // 💰 Billing & Finance Operations
+  // ==========================================
+  async getFeeStructures() {
+    const response = await fetch(`${API_URL}/billing/fee-structures`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  async createFeeStructure(feeData) {
+    const response = await fetch(`${API_URL}/billing/fee-structures`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(feeData),
+    });
+    return handleResponse(response);
+  },
+
+  async updateFeeStructure(id, feeData) {
+    const response = await fetch(`${API_URL}/billing/fee-structures/${id}`, {
+      method: 'PUT',
+      headers: getHeaders(),
+      body: JSON.stringify(feeData),
+    });
+    return handleResponse(response);
+  },
+
+  async assignFeeStructure(assignmentData) {
+    const response = await fetch(`${API_URL}/billing/assign-fee`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(assignmentData),
+    });
+    return handleResponse(response);
+  },
+
+  async getInvoices() {
+    const response = await fetch(`${API_URL}/billing/invoices`, {
+      method: 'GET',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  async generateInvoices() {
+    const response = await fetch(`${API_URL}/billing/invoices/generate`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  async updateInvoiceStatus(id, status) {
+    const response = await fetch(`${API_URL}/billing/invoices/${id}/status`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ status }),
+    });
+    return handleResponse(response);
   }
 };

@@ -4,7 +4,7 @@ import {
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, MapPin, 
   GraduationCap, Check, X, ArrowLeft, User, Trash2, GripVertical,
-  MoreVertical, Pencil, UserPlus
+  MoreVertical, Pencil, UserPlus, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -553,11 +553,13 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
       }
     }
 
-    if (payloadStops.length > 0) {
+    const validPayloadStops = payloadStops.filter(s => s.student_id !== null && s.student_id !== undefined && Number(s.student_id) > 0);
+
+    if (validPayloadStops.length > 0) {
       try {
         await manageStopsMutation.mutateAsync({
           id: numericRouteId,
-          stopData: { stops: payloadStops }
+          stopData: { stops: validPayloadStops }
         });
       } catch (err) {
         console.warn('Backend student stop sync failed:', err);
@@ -641,6 +643,14 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
 
     // Save to local storage overrides for fallback
     if (nameStr) {
+      if (numericRouteId) {
+        localStorage.setItem(`sbms_route_driver_${numericRouteId}`, nameStr);
+        localStorage.setItem(`sbms_route_driver_route-${numericRouteId}`, nameStr);
+      }
+      if (routeId) {
+        localStorage.setItem(`sbms_route_driver_${routeId}`, nameStr);
+      }
+
       const saved = localStorage.getItem('bus_override_#402-A');
       let parsed = {};
       if (saved) {
@@ -877,6 +887,10 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
           <Link to="/logistics" className="sidebar-link is-active">
             <MapPin size={18} />
             Route Logistics
+          </Link>
+          <Link to="/finance" className="sidebar-link">
+            <DollarSign size={18} />
+            Finance
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

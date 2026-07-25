@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, ChevronLeft, ChevronRight, X, MapPin, 
-  GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2
+  GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -357,6 +357,10 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
           <Link to="/logistics" className="sidebar-link is-active">
             <MapPin size={18} />
             Route Logistics
+          </Link>
+          <Link to="/finance" className="sidebar-link">
+            <DollarSign size={18} />
+            Finance
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

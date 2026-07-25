@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, Wrench, Calendar, AlertTriangle, MapPin,
-  GraduationCap, FileText
+  GraduationCap, FileText, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -282,6 +282,10 @@ const FleetManagementPage = ({ user, onSignOut }) => {
           <Link to="/logistics" className="sidebar-link">
             <MapPin size={18} />
             Route Logistics
+          </Link>
+          <Link to="/finance" className="sidebar-link">
+            <DollarSign size={18} />
+            Finance
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

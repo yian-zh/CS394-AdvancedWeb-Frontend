@@ -117,3 +117,28 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Global Form Placeholder Styling - Enhanced Transparency */
+input::placeholder,
+textarea::placeholder,
+select::placeholder,
+.ui-input::placeholder,
+.select-input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 0.55 !important;
+}
+
+::-webkit-input-placeholder {
+  color: #94a3b8 !important;
+  opacity: 0.55 !important;
+}
+
+::-moz-placeholder {
+  color: #94a3b8 !important;
+  opacity: 0.55 !important;
+}
+
+:-ms-input-placeholder {
+  color: #94a3b8 !important;
+  opacity: 0.55 !important;
+}

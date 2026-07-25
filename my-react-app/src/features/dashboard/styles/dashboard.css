@@ -1404,4 +1404,140 @@
   transform: translateX(4px);
 }
 
+/* --- Changes Notification Banner --- */
+.changes-banner {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-left: 4px solid #16a34a;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 8px;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.08);
+  animation: banner-slide-down 0.3s ease-out forwards;
+}
+
+@keyframes banner-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.changes-banner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.changes-banner-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.changes-banner-icon {
+  color: #15803d;
+  background: #dcfce7;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.changes-banner-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #14532d;
+  margin: 0 0 2px 0;
+}
+
+.changes-banner-sub {
+  font-size: 13px;
+  color: #166534;
+  margin: 0;
+}
+
+.changes-banner-close {
+  background: none;
+  border: none;
+  color: #166534;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.changes-banner-close:hover {
+  background-color: #dcfce7;
+}
+
+.changes-banner-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #bbf7d0;
+}
+
+.changes-banner-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #ffffff;
+  border: 1px solid #bbf7d0;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #14532d;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.change-field-label {
+  font-weight: 600;
+  color: #166534;
+}
+
+.change-old-val {
+  text-decoration: line-through;
+  color: #65a30d;
+  font-weight: 500;
+}
+
+.change-arrow {
+  color: #15803d;
+  font-weight: 700;
+}
+
+.change-new-val {
+  font-weight: 700;
+  color: #14532d;
+}
+
+/* Button disabled & submit safety states */
+.ui-button:disabled,
+.ui-button[disabled],
+.variant-primary:disabled,
+.variant-primary[disabled] {
+  background-color: #94a3b8 !important;
+  border-color: #94a3b8 !important;
+  color: #ffffff !important;
+  cursor: not-allowed !important;
+  opacity: 0.7 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+
+
 

@@ -8,6 +8,7 @@ import BusDetailPage from './features/dashboard/pages/BusDetailPage';
 import RouteLogisticsPage from './features/dashboard/pages/RouteLogisticsPage';
 import RouteDetailPage from './features/dashboard/pages/RouteDetailPage';
 import StudentsPage from './features/dashboard/pages/StudentsPage';
+import FinancePage from './features/dashboard/pages/FinancePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { authService } from './features/auth/services/authService';
 
@@ -109,6 +110,19 @@ function App() {
           element={
             <ProtectedRoute user={user}>
               <RouteDetailPage 
+                user={user} 
+                onSignOut={handleSignOut} 
+              />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Financial Dashboard (Protected) */}
+        <Route 
+          path="/finance" 
+          element={
+            <ProtectedRoute user={user}>
+              <FinancePage 
                 user={user} 
                 onSignOut={handleSignOut} 
               />
