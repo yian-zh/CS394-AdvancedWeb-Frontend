@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, MapPin, 
@@ -9,8 +9,9 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useRoutes, useManageStops, useUpdateRoute } from '../hooks/useRoutes';
-import { useStudents } from '../hooks/useStudents';
+import { useRoutes, useManageStops, useUpdateRoute, useDeleteRoute, useAssignBusToRoute } from '../hooks/useRoutes';
+import { useStudents, useCreateStudent } from '../hooks/useStudents';
+import { useBuses } from '../hooks/useFleet';
 import LocationPinPicker from '../components/LocationPinPicker';
 import RouteOverviewMap from '../components/RouteOverviewMap';
 import '../styles/dashboard.css';
@@ -22,6 +23,35 @@ function getInitials(name) {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
   return name.slice(0, 2).toUpperCase();
+}
+
+function parseTimeRange(timeWindowStr) {
+  if (!timeWindowStr) return null;
+  const parts = timeWindowStr.split('-').map(s => s.trim());
+  if (parts.length !== 2) return null;
+
+  const parseMinutes = (str) => {
+    const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3].toUpperCase();
+    if (period === 'PM' && hours < 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  };
+
+  const start = parseMinutes(parts[0]);
+  const end = parseMinutes(parts[1]);
+  if (start === null || end === null) return null;
+  return { start, end };
+}
+
+function isTimeOverlapping(window1, window2) {
+  const range1 = parseTimeRange(window1);
+  const range2 = parseTimeRange(window2);
+  if (!range1 || !range2) return false;
+  return range1.start < range2.end && range2.start < range1.end;
 }
 
 const PHNOM_PENH_PIN_PRESETS = [
@@ -105,28 +135,149 @@ const INITIAL_DRIVERS = [
 
 const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const { routeId } = useParams();
+  const navigate = useNavigate();
   const currentRoute = ROUTE_DETAILS[routeId] || ROUTE_DETAILS['route-1'];
 
   const { data: rawRoutes = [], isLoading: isQueryLoading, error: queryError } = useRoutes();
   const { data: rawStudents = [], isLoading: isStudentsLoading } = useStudents();
+  const { data: rawBuses = [] } = useBuses();
+  const createStudentMutation = useCreateStudent();
   const manageStopsMutation = useManageStops();
   const updateRouteMutation = useUpdateRoute();
+  const deleteRouteMutation = useDeleteRoute();
+  const assignBusMutation = useAssignBusToRoute();
+
   const [stops, setStops] = useState([]);
+  const [customStops, setCustomStops] = useState([]);
   const [selectedStopId, setSelectedStopId] = useState(1);
   const [activeDriver, setActiveDriver] = useState('');
+  const [activeBus, setActiveBus] = useState('#402-A');
   const [capacityUsed, setCapacityUsed] = useState(0);
   const [capacityTotal, setCapacityTotal] = useState(60);
+
+  // Bus Change Modal States
+  const [isBusModalOpen, setIsBusModalOpen] = useState(false);
+  const [busSearchTerm, setBusSearchTerm] = useState('');
+  const [selectedBusObj, setSelectedBusObj] = useState(null);
 
   // Route Rename states
   const [routeNameOverride, setRouteNameOverride] = useState('');
   const [isRouteRenameModalOpen, setIsRouteRenameModalOpen] = useState(false);
+  const [isDeleteRouteModalOpen, setIsDeleteRouteModalOpen] = useState(false);
   const [renameInputValue, setRenameInputValue] = useState('');
+
+  const DEFAULT_BUS_LIST = useMemo(() => [
+    { id: 1, bus_id: 1, bus_number: '402-A', busNumber: '#402-A', capacity: 60, status: 'Active' },
+    { id: 2, bus_id: 2, bus_number: '108', busNumber: '#108', capacity: 52, status: 'Active' },
+    { id: 3, bus_id: 3, bus_number: 'S-14', busNumber: '#S-14', capacity: 15, status: 'Special Ed' },
+    { id: 4, bus_id: 4, bus_number: '402', busNumber: '#402', capacity: 45, status: 'Active' },
+    { id: 5, bus_id: 5, bus_number: '882', busNumber: '#882', capacity: 50, status: 'Maintenance' },
+    { id: 6, bus_id: 6, bus_number: '501-B', busNumber: '#501-B', capacity: 65, status: 'Active' }
+  ], []);
+
+  const busOptions = useMemo(() => {
+    if (rawBuses && rawBuses.length > 0) {
+      return rawBuses.map(b => ({
+        id: b.bus_id,
+        bus_id: b.bus_id,
+        bus_number: b.bus_number,
+        busNumber: `#${b.bus_number}`,
+        capacity: b.capacity || 50,
+        status: b.status || 'Active'
+      }));
+    }
+    return DEFAULT_BUS_LIST;
+  }, [rawBuses, DEFAULT_BUS_LIST]);
+
+  const busOptionsWithSchedule = useMemo(() => {
+    const currentRouteTime = '07:00 AM - 08:30 AM';
+    return busOptions.map(b => {
+      const assignedRoute = rawRoutes.find(r => 
+        String(r.route_id) !== String(routeId) &&
+        r.buses && r.buses.some(rb => `#${rb.bus_number}` === b.busNumber || String(rb.bus_id) === String(b.bus_id))
+      );
+
+      let isOverlapping = false;
+      let conflictInfo = null;
+
+      if (assignedRoute) {
+        const assignedTime = '07:00 AM - 08:30 AM';
+        if (isTimeOverlapping(currentRouteTime, assignedTime)) {
+          isOverlapping = true;
+          conflictInfo = `${assignedRoute.route_name} (${assignedTime})`;
+        }
+      }
+
+      return {
+        ...b,
+        isOverlapping,
+        conflictInfo
+      };
+    });
+  }, [busOptions, rawRoutes, routeId]);
+
+  const filteredBuses = useMemo(() => {
+    if (!busSearchTerm.trim()) return busOptionsWithSchedule;
+    const term = busSearchTerm.toLowerCase();
+    return busOptionsWithSchedule.filter(b => 
+      b.busNumber.toLowerCase().includes(term) || String(b.capacity).includes(term)
+    );
+  }, [busOptionsWithSchedule, busSearchTerm]);
+
+  const handleAssignBusSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedBusObj || assignBusMutation.isPending) return;
+
+    const busNumberStr = selectedBusObj.busNumber || `#${selectedBusObj.bus_number}`;
+    setActiveBus(busNumberStr);
+    if (selectedBusObj.capacity) setCapacityTotal(selectedBusObj.capacity);
+
+    const numericRouteId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+    const busIdNum = selectedBusObj.bus_id || selectedBusObj.id;
+
+    if (numericRouteId && !isNaN(numericRouteId) && busIdNum) {
+      try {
+        await assignBusMutation.mutateAsync({
+          bus_id: typeof busIdNum === 'number' ? busIdNum : 1,
+          route_id: numericRouteId,
+          assigned_date: new Date().toISOString().split('T')[0]
+        });
+      } catch (err) {
+        console.warn('Backend bus assignment sync note:', err);
+      }
+    }
+
+    setIsBusModalOpen(false);
+    setSelectedBusObj(null);
+    setBusSearchTerm('');
+  };
 
   const displayRouteName = routeNameOverride || currentRoute.name;
 
   const handleOpenRenameRouteModal = () => {
     setRenameInputValue(displayRouteName);
     setIsRouteRenameModalOpen(true);
+  };
+
+  const handleOpenDeleteRouteModal = () => {
+    setIsDeleteRouteModalOpen(true);
+  };
+
+  const handleDeleteRouteSubmit = async (e) => {
+    e.preventDefault();
+    if (deleteRouteMutation.isPending) return;
+
+    const numericId = parseInt(routeId, 10);
+    if (numericId && !isNaN(numericId)) {
+      try {
+        await deleteRouteMutation.mutateAsync(numericId);
+      } catch (err) {
+        console.warn('Backend route delete error:', err);
+      }
+    }
+
+    setIsDeleteRouteModalOpen(false);
+    navigate('/logistics');
   };
 
   const handleRenameRouteSubmit = async (e) => {
@@ -182,6 +333,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
         const fullName = `${s.first_name} ${s.last_name}`;
         return {
           id: String(s.student_id),
+          student_id: s.student_id,
           name: fullName,
           grade: s.grade_level || 'Grade 3',
           avatar: getInitials(fullName)
@@ -207,20 +359,75 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     if (rawRoutes.length > 0) {
       const matched = rawRoutes.find(r => String(r.route_id) === routeId || `route-${r.route_id}` === routeId);
       if (matched) {
+        const startStop = { 
+          id: 'start', 
+          name: matched.start_location, 
+          address: matched.start_location, 
+          type: 'stop', 
+          lat: 11.5760835, 
+          lng: 104.9230554, 
+          pinCategory: 'Start Depot',
+          students: []
+        };
         const uiStops = [];
-        uiStops.push({ id: 'start', name: matched.start_location, address: matched.start_location, type: 'stop', lat: 11.5760835, lng: 104.9230554, pinCategory: 'Start Depot' });
         
-        if (matched.students) {
+        if (matched.students && matched.students.length > 0) {
+          const stopsMap = new Map();
+
           matched.students.forEach((s, idx) => {
-            uiStops.push({
+            const stopAddr = s.pivot?.stop_address || s.pickup_add || 'Pick-up Address';
+            const studentObj = {
               id: String(s.student_id),
-              name: `${s.first_name} ${s.last_name}'s Pick-up`,
-              address: s.pickup_add || 'Pick-up Address',
-              type: 'stop',
-              lat: 11.556278 + (idx * 0.005),
-              lng: 104.928222 + (idx * 0.005),
-              pinCategory: 'Student Pick-up'
-            });
+              student_id: s.student_id,
+              name: `${s.first_name} ${s.last_name}`,
+              grade: s.grade_level || 'Grade 3',
+              avatar: getInitials(`${s.first_name} ${s.last_name}`)
+            };
+
+            const isStartDepot = stopAddr.toLowerCase() === matched.start_location.toLowerCase() || stopAddr.toLowerCase() === 'school';
+
+            if (isStartDepot) {
+              const exists = startStop.students.some(st => String(st.id) === String(studentObj.id));
+              if (!exists) {
+                startStop.students.push(studentObj);
+              }
+            } else {
+              if (!stopsMap.has(stopAddr)) {
+                stopsMap.set(stopAddr, {
+                  id: s.pivot?.student_stop_id ? `stop_${s.pivot.student_stop_id}` : `stop_${idx + 1}`,
+                  name: `${stopAddr}`,
+                  address: stopAddr,
+                  type: 'stop',
+                  lat: 11.556278 + (idx * 0.005),
+                  lng: 104.928222 + (idx * 0.005),
+                  pinCategory: 'Student Pick-up',
+                  students: []
+                });
+              }
+              const existingStudents = stopsMap.get(stopAddr).students;
+              const exists = existingStudents.some(st => String(st.id) === String(studentObj.id));
+              if (!exists) {
+                existingStudents.push(studentObj);
+              }
+            }
+          });
+
+          uiStops.push(startStop);
+          stopsMap.forEach(stopObj => uiStops.push(stopObj));
+        } else {
+          uiStops.push(startStop);
+        }
+
+        // Merge custom intermediate stops created by user that are not already present in uiStops
+        if (customStops && customStops.length > 0) {
+          customStops.forEach(cs => {
+            const exists = uiStops.some(s => 
+              String(s.id) === String(cs.id) || 
+              (s.address && cs.address && s.address.toLowerCase() === cs.address.toLowerCase() && s.name.toLowerCase() === cs.name.toLowerCase())
+            );
+            if (!exists) {
+              uiStops.push(cs);
+            }
           });
         }
         
@@ -229,6 +436,16 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
         setStops(uiStops);
         setSelectedStopId(uiStops[0]?.id || 'start');
         setActiveDriver(matched.driver ? `${matched.driver.first_name} ${matched.driver.last_name}` : 'Sarah Jenkins');
+        if (matched.buses && matched.buses.length > 0) {
+          setActiveBus(`#${matched.buses[0].bus_number}`);
+          if (matched.buses[0].capacity) setCapacityTotal(matched.buses[0].capacity);
+        } else if (matched.bus_number || matched.bus_id) {
+          setActiveBus(`#${matched.bus_number || matched.bus_id}`);
+        } else if (currentRoute.busId) {
+          setActiveBus(currentRoute.busId);
+        } else {
+          setActiveBus('#402-A');
+        }
         setCapacityUsed(matched.students ? matched.students.length : 0);
       } else {
         // Fallback to mock data if route not found in API list
@@ -301,6 +518,53 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     if (pinData.address) setEditStopAddress(pinData.address);
   };
 
+  const syncStopsWithBackend = async (currentStops) => {
+    const numericRouteId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+    if (!numericRouteId || isNaN(numericRouteId)) return;
+
+    const payloadStops = [];
+    let orderCounter = 1;
+
+    for (const stop of currentStops) {
+      if (stop.students && Array.isArray(stop.students) && stop.students.length > 0) {
+        for (const st of stop.students) {
+          let numericStudentId = null;
+          if (st.student_id && !isNaN(parseInt(st.student_id, 10))) {
+            numericStudentId = parseInt(st.student_id, 10);
+          } else if (st.id) {
+            const parsed = parseInt(String(st.id).replace(/\D/g, ''), 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              numericStudentId = parsed;
+            }
+          }
+
+          payloadStops.push({
+            student_id: numericStudentId,
+            stop_address: stop.address || stop.name || 'Phnom Penh Location',
+            stop_order: orderCounter++
+          });
+        }
+      } else if (stop.type !== 'arrival' && stop.id !== 'start') {
+        payloadStops.push({
+          student_id: null,
+          stop_address: stop.address || stop.name || 'Phnom Penh Location',
+          stop_order: orderCounter++
+        });
+      }
+    }
+
+    if (payloadStops.length > 0) {
+      try {
+        await manageStopsMutation.mutateAsync({
+          id: numericRouteId,
+          stopData: { stops: payloadStops }
+        });
+      } catch (err) {
+        console.warn('Backend student stop sync failed:', err);
+      }
+    }
+  };
+
   const handleSaveEditedStop = async (e) => {
     e.preventDefault();
     if (!editingStop || !editStopName.trim()) return;
@@ -320,19 +584,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     });
 
     setStops(updatedStops);
-
-    // Sync state with server via TanStack Query (React Query)
-    const numericRouteId = routeId ? parseInt(routeId.replace('route-', ''), 10) : null;
-    if (numericRouteId && !isNaN(numericRouteId)) {
-      try {
-        await manageStopsMutation.mutateAsync({
-          id: numericRouteId,
-          stopData: { stops: updatedStops }
-        });
-      } catch (err) {
-        console.warn('Backend stop edit sync failed, cached locally:', err);
-      }
-    }
+    await syncStopsWithBackend(updatedStops);
 
     setIsEditStopModalOpen(false);
     setEditingStop(null);
@@ -361,26 +613,52 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     }
   };
 
-  const handleAssignDriver = (driverName) => {
-    setActiveDriver(driverName);
-    
-    // Save to local storage overrides for Bus #402-A
-    const saved = localStorage.getItem('bus_override_#402-A');
-    let parsed = {};
-    if (saved) {
-      parsed = JSON.parse(saved);
-    }
-    parsed.driver = driverName;
-    localStorage.setItem('bus_override_#402-A', JSON.stringify(parsed));
+  const handleAssignDriver = async (driverInput) => {
+    let nameStr = '';
+    let driverIdNum = null;
 
-    // Update the fleet list status if needed
-    const updatedFleet = fleet.map(b => {
-      if (b.id === '#402-A') {
-        return { ...b, driver: driverName };
+    if (typeof driverInput === 'string') {
+      nameStr = driverInput;
+    } else if (driverInput && typeof driverInput === 'object') {
+      nameStr = driverInput.name || `${driverInput.first_name} ${driverInput.last_name}`;
+      driverIdNum = driverInput.user_id || driverInput.id;
+    }
+
+    if (nameStr) setActiveDriver(nameStr);
+
+    const numericRouteId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+
+    if (numericRouteId && !isNaN(numericRouteId) && driverIdNum) {
+      try {
+        await updateRouteMutation.mutateAsync({
+          id: numericRouteId,
+          routeData: { driver_id: driverIdNum }
+        });
+      } catch (err) {
+        console.warn('Backend driver assignment sync note:', err);
       }
-      return b;
-    });
-    setFleet(updatedFleet);
+    }
+
+    // Save to local storage overrides for fallback
+    if (nameStr) {
+      const saved = localStorage.getItem('bus_override_#402-A');
+      let parsed = {};
+      if (saved) {
+        try { parsed = JSON.parse(saved); } catch (e) {}
+      }
+      parsed.driver = nameStr;
+      localStorage.setItem('bus_override_#402-A', JSON.stringify(parsed));
+
+      if (fleet && Array.isArray(fleet)) {
+        const updatedFleet = fleet.map(b => {
+          if (b.id === '#402-A') {
+            return { ...b, driver: nameStr };
+          }
+          return b;
+        });
+        if (typeof setFleet === 'function') setFleet(updatedFleet);
+      }
+    }
 
     setIsDriverModalOpen(false);
   };
@@ -420,19 +698,11 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
 
     setStops(updatedStops);
     setSelectedStopId(newId);
-
-    // Sync state with server via TanStack Query (React Query) if routeId is numeric
-    const numericRouteId = routeId ? parseInt(routeId.replace('route-', ''), 10) : null;
-    if (numericRouteId && !isNaN(numericRouteId)) {
-      try {
-        await manageStopsMutation.mutateAsync({
-          id: numericRouteId,
-          stopData: { stops: updatedStops }
-        });
-      } catch (err) {
-        console.warn('Backend stop creation sync failed, stored in React Query cache:', err);
-      }
-    }
+    setCustomStops(prev => {
+      const exists = prev.some(s => s.id === newStop.id);
+      return exists ? prev : [...prev, newStop];
+    });
+    await syncStopsWithBackend(updatedStops);
 
     setNewStopName('');
     setNewStopAddress('');
@@ -446,12 +716,41 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     e.preventDefault();
     if (!selectedStudentStopId) return;
 
-    const studentToAssign = selectedStudentObj || (newStudentName.trim() ? {
-      id: `std_${Date.now()}`,
-      name: newStudentName.trim(),
-      grade: 'Grade 3',
-      avatar: getInitials(newStudentName.trim())
-    } : null);
+    let studentToAssign = selectedStudentObj;
+
+    // If custom student name entered, create student in backend PostgreSQL DB first
+    if (!studentToAssign && newStudentName.trim()) {
+      const nameTrimmed = newStudentName.trim();
+      const parts = nameTrimmed.split(' ');
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ') || 'Student';
+
+      try {
+        const res = await createStudentMutation.mutateAsync({
+          first_name: firstName,
+          last_name: lastName,
+          student_code: `STU-${Math.floor(1000 + Math.random() * 9000)}`,
+          date_of_birth: '2016-01-01',
+          grade_level: 'Grade 3'
+        });
+        const createdStudent = res.student || res;
+        studentToAssign = {
+          id: String(createdStudent.student_id),
+          student_id: createdStudent.student_id,
+          name: `${createdStudent.first_name} ${createdStudent.last_name}`,
+          grade: createdStudent.grade_level || 'Grade 3',
+          avatar: getInitials(`${createdStudent.first_name} ${createdStudent.last_name}`)
+        };
+      } catch (err) {
+        console.warn('Could not create student in backend DB, using fallback object:', err);
+        studentToAssign = {
+          id: `std_${Date.now()}`,
+          name: nameTrimmed,
+          grade: 'Grade 3',
+          avatar: getInitials(nameTrimmed)
+        };
+      }
+    }
 
     if (!studentToAssign) return;
 
@@ -471,18 +770,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     setStops(updatedStops);
     setCapacityUsed(totalPassengers);
 
-    // Persist updated stop sequence & student assignments to database via TanStack Query
-    const numericRouteId = routeId ? parseInt(routeId.replace('route-', ''), 10) : null;
-    if (numericRouteId && !isNaN(numericRouteId)) {
-      try {
-        await manageStopsMutation.mutateAsync({
-          id: numericRouteId,
-          stopData: { stops: updatedStops }
-        });
-      } catch (err) {
-        console.warn('Backend student registration sync failed:', err);
-      }
-    }
+    await syncStopsWithBackend(updatedStops);
 
     setNewStudentName('');
     setStudentSearchTerm('');
@@ -496,6 +784,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     const stopId = stopToDelete.id;
     const updatedStops = stops.filter(s => s.id !== stopId);
     setStops(updatedStops);
+    setCustomStops(prev => prev.filter(s => s.id !== stopId));
     if (selectedStopId === stopId) {
       if (updatedStops.length > 0) {
         setSelectedStopId(updatedStops[0].id);
@@ -504,17 +793,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
       }
     }
 
-    const numericRouteId = routeId ? parseInt(routeId.replace('route-', ''), 10) : null;
-    if (numericRouteId && !isNaN(numericRouteId)) {
-      try {
-        await manageStopsMutation.mutateAsync({
-          id: numericRouteId,
-          stopData: { stops: updatedStops }
-        });
-      } catch (err) {
-        console.warn('Backend stop deletion sync failed:', err);
-      }
-    }
+    await syncStopsWithBackend(updatedStops);
 
     setStopToDelete(null);
     setIsDeleteConfirmModalOpen(false);
@@ -677,10 +956,86 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                   <Pencil size={13} />
                   Rename
                 </button>
+                <button
+                  type="button"
+                  onClick={handleOpenDeleteRouteModal}
+                  title="Delete Route"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.18)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.08)'}
+                >
+                  <Trash2 size={13} />
+                  Delete
+                </button>
               </div>
-              <p className="canvas-subtitle" style={{ fontSize: '14px' }}>
+              <p className="canvas-subtitle" style={{ fontSize: '14px', margin: '4px 0 8px 0' }}>
                 Route Stop sequence and dynamic assignment planner for Phnom Penh District.
               </p>
+
+              {/* Prominent Assigned Bus & Driver Badges */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '6px' }}>
+                <div 
+                  onClick={() => setIsBusModalOpen(true)}
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    backgroundColor: 'rgba(0, 35, 111, 0.08)', 
+                    color: 'var(--primary-brand)', 
+                    padding: '5px 14px', 
+                    borderRadius: '20px', 
+                    fontSize: '13px', 
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    border: '1px solid rgba(0, 35, 111, 0.15)'
+                  }}
+                  title="Click to Change Assigned Bus"
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0, 35, 111, 0.14)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(0, 35, 111, 0.08)'}
+                >
+                  <Bus size={15} />
+                  Assigned Bus: {activeBus}
+                  <span style={{ fontSize: '11px', fontWeight: 600, opacity: 0.8, textDecoration: 'underline', marginLeft: '4px' }}>Change</span>
+                </div>
+
+                <div 
+                  onClick={() => setIsDriverModalOpen(true)}
+                  style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    backgroundColor: '#f1f5f9', 
+                    color: '#334155', 
+                    padding: '5px 14px', 
+                    borderRadius: '20px', 
+                    fontSize: '13px', 
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    border: '1px solid rgba(148, 163, 184, 0.2)'
+                  }}
+                  title="Click to Change Driver"
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                >
+                  <User size={15} style={{ color: 'var(--primary-brand)' }} />
+                  Driver: {activeDriver}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -692,6 +1047,15 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
               >
                 <Plus size={14} />
                 Add Stop
+              </button>
+              <button 
+                type="button" 
+                className="add-user-btn"
+                onClick={() => setIsBusModalOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Bus size={14} />
+                Assign Bus
               </button>
               <button 
                 type="button" 
@@ -729,7 +1093,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                   const isSelected = selectedStopId === stop.id;
 
                   return (
-                    <div key={stop.id} style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    <div key={`stop_${stop.id}_${index}`} style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                       {/* Connector Plus Icon (above card, except first stop) */}
                       {index > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '8px 0' }}>
@@ -835,7 +1199,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                           )}
 
                           {/* Assigned Students Badges */}
-                          {!isArrival && (
+                          {!isArrival && stop.id !== 'start' && stop.pinCategory !== 'Start Depot' && (
                             <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed rgba(197, 197, 211, 0.4)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dark)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -877,9 +1241,9 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
 
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
                                 {stop.students && stop.students.length > 0 ? (
-                                  stop.students.map((st) => (
+                                  stop.students.map((st, stIdx) => (
                                     <span 
-                                      key={st.id || st.name}
+                                      key={`st_${st.id || st.student_id || st.name}_${stIdx}`}
                                       style={{
                                         fontSize: '11px',
                                         fontWeight: 600,
@@ -1094,9 +1458,27 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                         <Bus size={18} />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary-brand)' }}>
-                          Bus {currentRoute.busId}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary-brand)' }}>
+                            Bus {activeBus}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsBusModalOpen(true)}
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              color: 'var(--primary-brand)',
+                              backgroundColor: 'rgba(0, 35, 111, 0.08)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '2px 6px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Change
+                          </button>
+                        </div>
                         <span style={{ fontSize: '12px', color: 'var(--icon-color)' }}>
                           Driver: {activeDriver}
                         </span>
@@ -1401,9 +1783,13 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                     required
                   >
                     <option value="">Select Target Stop...</option>
-                    {stops.filter(s => s.type !== 'arrival').map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.address})</option>
-                    ))}
+                    {stops.filter(s => s.type !== 'arrival' && s.id !== 'start' && s.pinCategory !== 'Start Depot').length === 0 ? (
+                      <option value="" disabled>No pick-up stops available (add a stop first)</option>
+                    ) : (
+                      stops.filter(s => s.type !== 'arrival' && s.id !== 'start' && s.pinCategory !== 'Start Depot').map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.address})</option>
+                      ))
+                    )}
                   </select>
                 </div>
 
@@ -1623,6 +2009,182 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
               </Button>
               <Button type="submit" disabled={!renameInputValue.trim()}>
                 Save Route Name
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* --- Delete Route Confirmation Modal --- */}
+      {isDeleteRouteModalOpen && (
+        <div className="modal-overlay">
+          <form onSubmit={handleDeleteRouteSubmit} className="modal-card" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trash2 size={18} />
+                Delete Route
+              </h2>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => setIsDeleteRouteModalOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px', textAlign: 'left' }}>
+              <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-dark)' }}>
+                Are you sure you want to delete <strong style={{ color: '#ef4444' }}>{displayRouteName}</strong>?
+              </p>
+              <p style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>
+                This action will permanently delete the route and all associated student stops from the database.
+              </p>
+            </div>
+
+            <div className="modal-footer">
+              <Button 
+                type="button" 
+                variant="secondary" 
+                disabled={deleteRouteMutation.isPending}
+                onClick={() => setIsDeleteRouteModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={deleteRouteMutation.isPending}
+                style={{ backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#ffffff' }}
+              >
+                {deleteRouteMutation.isPending ? 'Deleting Route...' : 'Confirm Delete'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* --- Assign Bus Modal --- */}
+      {isBusModalOpen && (
+        <div className="modal-overlay">
+          <form onSubmit={handleAssignBusSubmit} className="modal-card" style={{ maxWidth: '480px', width: '92%' }}>
+            <div className="modal-header">
+              <div>
+                <h2 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Bus size={18} style={{ color: 'var(--primary-brand)' }} />
+                  Assign Vehicle / Bus to Route
+                </h2>
+                <p style={{ fontSize: '12px', color: 'var(--icon-color)', margin: '2px 0 0 0', textAlign: 'left' }}>
+                  Select an active fleet bus from the system to assign to this route.
+                </p>
+              </div>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => {
+                  setIsBusModalOpen(false);
+                  setSelectedBusObj(null);
+                  setBusSearchTerm('');
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'left' }}>
+                <Input 
+                  type="text" 
+                  icon={<Search size={14} />}
+                  placeholder="Search bus number or capacity..."
+                  value={busSearchTerm}
+                  onChange={(e) => setBusSearchTerm(e.target.value)}
+                />
+
+                <div 
+                  style={{
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    border: '1px solid rgba(197, 197, 211, 0.4)',
+                    borderRadius: '8px',
+                    backgroundColor: '#ffffff',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}
+                >
+                  {filteredBuses.length > 0 ? (
+                    filteredBuses.map((b) => {
+                      const isSelected = selectedBusObj && selectedBusObj.id === b.id;
+                      const isDisabled = b.isOverlapping && !isSelected;
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            setSelectedBusObj(b);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            borderBottom: '1px solid rgba(197, 197, 211, 0.15)',
+                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                            backgroundColor: isSelected ? 'rgba(0, 35, 111, 0.06)' : (isDisabled ? '#f8fafc' : 'transparent'),
+                            opacity: isDisabled ? 0.6 : 1,
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '28px', height: '28px', borderRadius: '6px', backgroundColor: isDisabled ? '#e2e8f0' : 'rgba(0, 35, 111, 0.08)', color: isDisabled ? '#94a3b8' : 'var(--primary-brand)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Bus size={15} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: isDisabled ? '#94a3b8' : 'var(--text-dark)' }}>{b.busNumber}</span>
+                                {isDisabled && (
+                                  <span style={{ fontSize: '10px', fontWeight: 600, color: '#dc2626', backgroundColor: '#fee2e2', padding: '1px 6px', borderRadius: '4px' }}>
+                                    ⚠️ Schedule Overlap
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ fontSize: '11px', color: 'var(--icon-color)' }}>
+                                {isDisabled ? `Conflicts with ${b.conflictInfo}` : `Capacity: ${b.capacity} seats • ${b.status}`}
+                              </span>
+                            </div>
+                          </div>
+
+                          {isSelected ? (
+                            <Check size={16} style={{ color: 'var(--primary-brand)' }} />
+                          ) : (
+                            !isDisabled && <span style={{ fontSize: '11px', color: 'var(--primary-brand)', fontWeight: 600 }}>Select</span>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '12px' }}>
+                      No matching buses found
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <Button 
+                type="button" 
+                variant="secondary" 
+                disabled={assignBusMutation.isPending}
+                onClick={() => {
+                  setIsBusModalOpen(false);
+                  setSelectedBusObj(null);
+                  setBusSearchTerm('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!selectedBusObj || assignBusMutation.isPending}>
+                {assignBusMutation.isPending ? 'Assigning...' : 'Assign Bus to Route'}
               </Button>
             </div>
           </form>

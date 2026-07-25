@@ -9,7 +9,7 @@ import {
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
 import Input from '../../../components/ui/Input';
-import { useBuses, useUploadBusDocument } from '../hooks/useFleet';
+import { useBuses, useUploadBusDocument, useUpdateBus } from '../hooks/useFleet';
 import '../styles/dashboard.css';
 
 // Fallback school bus image in assets
@@ -21,7 +21,20 @@ const BusDetailPage = ({ user, onSignOut }) => {
 
   const { data: rawBuses = [], isLoading, error } = useBuses();
   const uploadBusDocumentMutation = useUploadBusDocument();
+  const updateBusMutation = useUpdateBus();
   const [imageError, setImageError] = useState(false);
+
+  // Edit Modal State — declared early so hooks are always called in the same order
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editDriver, setEditDriver] = useState('');
+  const [editRoute, setEditRoute] = useState('');
+  const [editMileage, setEditMileage] = useState('');
+  const [editCapacity, setEditCapacity] = useState(60);
+
+  // Add Document Modal State
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocExpiry, setNewDocExpiry] = useState('');
 
   const busDetails = useMemo(() => {
     const cleanId = rawBusId.replace('#', '');
@@ -87,33 +100,32 @@ const BusDetailPage = ({ user, onSignOut }) => {
   const details = busDetails;
   const currentImage = schoolBusImage;
 
-  // Edit Modal State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editDriver, setEditDriver] = useState('');
-  const [editRoute, setEditRoute] = useState('');
-  const [editMileage, setEditMileage] = useState('');
-  const [editCapacity, setEditCapacity] = useState(60);
-
-  // Add Document Modal State
-  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
-  const [newDocName, setNewDocName] = useState('');
-  const [newDocExpiry, setNewDocExpiry] = useState('');
-
   const openEditModal = () => {
-    setEditDriver(details.driver);
-    setEditRoute(details.route);
-    setEditMileage(details.mileage);
-    setEditCapacity(details.capacityTotal || 60);
+    setEditDriver(details ? details.driver : '');
+    setEditRoute(details ? details.route : '');
+    setEditMileage(details ? details.mileage : '');
+    setEditCapacity(details ? (details.capacityTotal || 60) : 60);
     setIsEditModalOpen(true);
   };
 
-  const handleSaveDetails = (e) => {
+  const handleSaveDetails = async (e) => {
     e.preventDefault();
-    // Save local overrides to localStorage for display purposes
-    const saved = localStorage.getItem(`bus_override_${rawBusId}`);
-    const existing = saved ? JSON.parse(saved) : {};
-    const newOverrides = { ...existing, driver: editDriver, route: editRoute, mileage: editMileage };
-    localStorage.setItem(`bus_override_${rawBusId}`, JSON.stringify(newOverrides));
+    const mileageNum = editMileage ? parseInt(String(editMileage).replace(/[^0-9]/g, ''), 10) : null;
+    const capacityNum = editCapacity ? parseInt(String(editCapacity), 10) : null;
+
+    if (details && details.bus_id) {
+      try {
+        await updateBusMutation.mutateAsync({
+          id: details.bus_id,
+          busData: {
+            ...(capacityNum && !isNaN(capacityNum) ? { capacity: capacityNum } : {}),
+            ...(mileageNum && !isNaN(mileageNum) ? { mileage: mileageNum } : {}),
+          }
+        });
+      } catch (err) {
+        console.warn('Bus update error:', err);
+      }
+    }
     setIsEditModalOpen(false);
   };
 

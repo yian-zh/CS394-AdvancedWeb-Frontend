@@ -3,18 +3,85 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, ChevronLeft, ChevronRight, X, MapPin, 
-  GraduationCap, ArrowRight, Clock, Pencil
+  GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useRoutes, useCreateRoute, useUpdateRoute } from '../hooks/useRoutes';
+import { useRoutes, useCreateRoute, useUpdateRoute, useDeleteRoute } from '../hooks/useRoutes';
+import { useBuses } from '../hooks/useFleet';
+import { useUsers } from '../hooks/useUsers';
 import '../styles/dashboard.css';
+
+const DEFAULT_DRIVERS = [
+  { id: 'd1', name: 'Marcus Sterling', license: '#7741', status: 'Available' },
+  { id: 'd2', name: 'Sarah Jenkins', license: '#7742', status: 'Assigned' },
+  { id: 'd3', name: 'Robert Miller', license: '#8829', status: 'Available' },
+  { id: 'd4', name: 'David Chen', license: '#9012', status: 'On Leave' },
+  { id: 'd5', name: 'Elena Rodriguez', license: '#1084', status: 'Assigned' },
+  { id: 'd6', name: 'John Doe', license: '#5519', status: 'Available' }
+];
+
+const DEFAULT_BUSES = [
+  { id: '#402-A', busNumber: '#402-A', capacity: 60, status: 'Active' },
+  { id: '#108', busNumber: '#108', capacity: 52, status: 'Active' },
+  { id: '#S-14', busNumber: '#S-14', capacity: 15, status: 'Special Ed' },
+  { id: '#402', busNumber: '#402', capacity: 45, status: 'Active' },
+  { id: '#882', busNumber: '#882', capacity: 50, status: 'Maintenance' },
+  { id: '#501-B', busNumber: '#501-B', capacity: 65, status: 'Active' }
+];
+
+const TIME_OPTIONS = [
+  '06:00 AM', '06:15 AM', '06:30 AM', '06:45 AM',
+  '07:00 AM', '07:15 AM', '07:30 AM', '07:45 AM',
+  '08:00 AM', '08:15 AM', '08:30 AM', '08:45 AM',
+  '09:00 AM', '11:30 AM', '12:00 PM', '01:00 PM',
+  '02:30 PM', '03:30 PM', '04:00 PM', '05:00 PM'
+];
+
+const PRESET_SHIFTS = [
+  { label: '🌅 Morning A', start: '06:45 AM', end: '08:15 AM' },
+  { label: '🌅 Morning B', start: '07:00 AM', end: '08:30 AM' },
+  { label: '☀️ Mid-Day', start: '11:30 AM', end: '01:00 PM' },
+  { label: '🌆 Afternoon', start: '02:30 PM', end: '04:00 PM' }
+];
+
+function parseTimeRange(timeWindowStr) {
+  if (!timeWindowStr) return null;
+  const parts = timeWindowStr.split('-').map(s => s.trim());
+  if (parts.length !== 2) return null;
+
+  const parseMinutes = (str) => {
+    const match = str.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return null;
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3].toUpperCase();
+    if (period === 'PM' && hours < 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  };
+
+  const start = parseMinutes(parts[0]);
+  const end = parseMinutes(parts[1]);
+  if (start === null || end === null) return null;
+  return { start, end };
+}
+
+function isTimeOverlapping(window1, window2) {
+  const range1 = parseTimeRange(window1);
+  const range2 = parseTimeRange(window2);
+  if (!range1 || !range2) return false;
+  return range1.start < range2.end && range2.start < range1.end;
+}
 
 const RouteLogisticsPage = ({ user, onSignOut }) => {
   const { data: rawRoutes = [], isLoading, error } = useRoutes();
+  const { data: rawBuses = [] } = useBuses();
+  const { data: rawUsers = [] } = useUsers();
   const createRouteMutation = useCreateRoute();
   const updateRouteMutation = useUpdateRoute();
+  const deleteRouteMutation = useDeleteRoute();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All'); // All | Active | Delayed
@@ -23,18 +90,80 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedRouteForRename, setSelectedRouteForRename] = useState(null);
+  const [selectedRouteForDelete, setSelectedRouteForDelete] = useState(null);
   const [renameInputValue, setRenameInputValue] = useState('');
 
   // New Route Form State
   const [newRouteName, setNewRouteName] = useState('');
   const [newDriverName, setNewDriverName] = useState('');
   const [newBusId, setNewBusId] = useState('');
+  const [startTime, setStartTime] = useState('07:00 AM');
+  const [endTime, setEndTime] = useState('08:30 AM');
   const [newTimeWindow, setNewTimeWindow] = useState('07:00 AM - 08:30 AM');
-  const [newStopsCount, setNewStopsCount] = useState(10);
-  const [newCapacityTotal, setNewCapacityTotal] = useState(60);
-  const [newDetail, setNewDetail] = useState('Mornings & Afternoons');
+  const [newStopsCount, setNewStopsCount] = useState('');
+  const [newCapacityTotal, setNewCapacityTotal] = useState('');
+  const [newDetail, setNewDetail] = useState('');
   const [formErrors, setFormErrors] = useState({});
+
+  // Searchable dropdown states
+  const [driverSearchQuery, setDriverSearchQuery] = useState('');
+  const [isDriverDropdownOpen, setIsDriverDropdownOpen] = useState(false);
+  const [busSearchQuery, setBusSearchQuery] = useState('');
+  const [isBusDropdownOpen, setIsBusDropdownOpen] = useState(false);
+
+  // Available drivers list dynamically derived from backend users or defaults
+  const driverOptions = useMemo(() => {
+    if (rawUsers && rawUsers.length > 0) {
+      const userDrivers = rawUsers
+        .filter(u => u.role === 'driver' || u.role === 'Admin' || u.role === 'admin')
+        .map(u => ({
+          id: String(u.user_id),
+          name: `${u.first_name} ${u.last_name}`,
+          license: `#${Math.floor(1000 + Math.random() * 9000)}`,
+          status: 'Available'
+        }));
+      if (userDrivers.length > 0) return userDrivers;
+    }
+    return DEFAULT_DRIVERS;
+  }, [rawUsers]);
+
+  const filteredDriverOptions = useMemo(() => {
+    if (!driverSearchQuery.trim()) return driverOptions;
+    const q = driverSearchQuery.toLowerCase();
+    return driverOptions.filter(d => d.name.toLowerCase().includes(q) || d.license.toLowerCase().includes(q));
+  }, [driverOptions, driverSearchQuery]);
+
+  // Available buses list dynamically derived from backend buses or defaults
+  const busOptions = useMemo(() => {
+    if (rawBuses && rawBuses.length > 0) {
+      return rawBuses.map(b => ({
+        id: `#${b.bus_number}`,
+        busNumber: `#${b.bus_number}`,
+        capacity: b.capacity || 50,
+        status: b.status || 'Active'
+      }));
+    }
+    return DEFAULT_BUSES;
+  }, [rawBuses]);
+
+
+  const handleSelectStartTime = (time) => {
+    setStartTime(time);
+    setNewTimeWindow(`${time} - ${endTime}`);
+  };
+
+  const handleSelectEndTime = (time) => {
+    setEndTime(time);
+    setNewTimeWindow(`${startTime} - ${time}`);
+  };
+
+  const handleSelectPresetShift = (shift) => {
+    setStartTime(shift.start);
+    setEndTime(shift.end);
+    setNewTimeWindow(`${shift.start} - ${shift.end}`);
+  };
 
   const [routeOverrides, setRouteOverrides] = useState({});
 
@@ -61,15 +190,43 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
     });
   }, [rawRoutes, routeOverrides]);
 
+  const busOptionsWithSchedule = useMemo(() => {
+    return busOptions.map(b => {
+      const assignedRoute = routes.find(r => r.busId === b.busNumber);
+      let isOverlapping = false;
+      let conflictInfo = null;
+
+      if (assignedRoute && assignedRoute.timeWindow) {
+        if (isTimeOverlapping(newTimeWindow, assignedRoute.timeWindow)) {
+          isOverlapping = true;
+          conflictInfo = `${assignedRoute.name} (${assignedRoute.timeWindow})`;
+        }
+      }
+
+      return {
+        ...b,
+        isOverlapping,
+        conflictInfo
+      };
+    });
+  }, [busOptions, routes, newTimeWindow]);
+
+  const filteredBusOptions = useMemo(() => {
+    if (!busSearchQuery.trim()) return busOptionsWithSchedule;
+    const q = busSearchQuery.toLowerCase();
+    return busOptionsWithSchedule.filter(b => b.busNumber.toLowerCase().includes(q) || String(b.capacity).includes(q));
+  }, [busOptionsWithSchedule, busSearchQuery]);
+
   const handleAddRoute = async (e) => {
     e.preventDefault();
+    if (createRouteMutation.isPending) return;
     if (!newRouteName.trim() || !newDriverName.trim() || !newBusId.trim()) return;
 
     try {
       const routeData = {
         route_name: newRouteName.trim(),
-        start_location: 'Main Depot',
-        end_location: newDetail.trim() || 'Oakwood Elementary School',
+        start_location: 'School',
+        end_location: 'School',
         estimated_duration: 45
       };
 
@@ -81,9 +238,9 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
       setNewDriverName('');
       setNewBusId('');
       setNewTimeWindow('07:00 AM - 08:30 AM');
-      setNewStopsCount(10);
-      setNewCapacityTotal(60);
-      setNewDetail('Mornings & Afternoons');
+      setNewStopsCount('');
+      setNewCapacityTotal('');
+      setNewDetail('');
       setFormErrors({});
     } catch (err) {
       setFormErrors({ submit: err.message || 'Failed to create route' });
@@ -122,6 +279,32 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
     setIsRenameModalOpen(false);
     setSelectedRouteForRename(null);
+  };
+
+  const handleOpenDeleteModal = (e, route) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedRouteForDelete(route);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteRouteSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedRouteForDelete || deleteRouteMutation.isPending) return;
+
+    const routeId = selectedRouteForDelete.id;
+    const numericId = parseInt(routeId, 10);
+
+    if (numericId && !isNaN(numericId)) {
+      try {
+        await deleteRouteMutation.mutateAsync(numericId);
+      } catch (err) {
+        console.warn('Backend route deletion note:', err);
+      }
+    }
+
+    setIsDeleteModalOpen(false);
+    setSelectedRouteForDelete(null);
   };
 
   const getInitials = (name) => {
@@ -332,6 +515,27 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
                         >
                           <Pencil size={12} />
                         </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenDeleteModal(e, route)}
+                          title="Delete Route"
+                          style={{
+                            background: 'rgba(239, 68, 68, 0.08)',
+                            border: '1px solid rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            padding: '4px 6px',
+                            borderRadius: '6px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.18)'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.08)'}
+                        >
+                          <Trash2 size={12} />
+                        </button>
                       </div>
                       <p className="route-card-detail">{route.detail}</p>
                     </div>
@@ -443,8 +647,8 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
       {/* --- Add Route Modal --- */}
       {isAddModalOpen && (
-        <div className="modal-overlay">
-          <form onSubmit={handleAddRoute} className="modal-card" style={{ maxWidth: '460px' }}>
+        <div className="modal-overlay" onClick={() => { setIsDriverDropdownOpen(false); setIsBusDropdownOpen(false); }}>
+          <form onSubmit={handleAddRoute} className="modal-card" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Create New Route</h2>
               <button type="button" className="modal-close-btn" onClick={() => setIsAddModalOpen(false)}>
@@ -458,94 +662,298 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
                     {formErrors.submit}
                   </div>
                 )}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Route Name</label>
-                <Input 
-                  type="text" 
-                  placeholder="e.g. Route 42 - North Campus"
-                  value={newRouteName}
-                  onChange={(e) => setNewRouteName(e.target.value)}
-                  required
-                />
-              </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Schedule / Details</label>
-                <Input 
-                  type="text" 
-                  placeholder="e.g. Mornings & Afternoons"
-                  value={newDetail}
-                  onChange={(e) => setNewDetail(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Driver Name</label>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Route Name</label>
                   <Input 
                     type="text" 
-                    placeholder="e.g. Marcus Sterling"
-                    value={newDriverName}
-                    onChange={(e) => setNewDriverName(e.target.value)}
+                    placeholder="e.g. Route 42 - North Campus"
+                    value={newRouteName}
+                    onChange={(e) => setNewRouteName(e.target.value)}
                     required
                   />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Assigned Bus ID</label>
-                  <Input 
-                    type="text" 
-                    placeholder="e.g. #402"
-                    value={newBusId}
-                    onChange={(e) => setNewBusId(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
+                {/* Driver & Bus ID Searchable Dropdowns */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {/* Searchable Driver Dropdown */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left', position: 'relative' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Driver Name</label>
+                    <div 
+                      onClick={() => {
+                        setIsDriverDropdownOpen(!isDriverDropdownOpen);
+                        setIsBusDropdownOpen(false);
+                      }}
+                      style={{
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(197, 197, 211, 0.5)',
+                        backgroundColor: '#ffffff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '13px',
+                        fontWeight: newDriverName ? 600 : 400,
+                        color: newDriverName ? 'var(--text-dark)' : '#94a3b8'
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        <Users size={15} style={{ color: 'var(--primary-brand)', flexShrink: 0 }} />
+                        {newDriverName || 'Select Driver...'}
+                      </span>
+                      <ChevronDown size={14} style={{ color: '#64748b', flexShrink: 0 }} />
+                    </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Time Window</label>
-                  <Input 
-                    type="text" 
-                    placeholder="e.g. 06:45 AM - 08:15 AM"
-                    value={newTimeWindow}
-                    onChange={(e) => setNewTimeWindow(e.target.value)}
-                    required
-                  />
+                    {isDriverDropdownOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: '4px',
+                        backgroundColor: '#ffffff',
+                        border: '1px solid rgba(197, 197, 211, 0.4)',
+                        borderRadius: '8px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                        zIndex: 100,
+                        padding: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <Input 
+                          type="text" 
+                          icon={<Search size={13} />}
+                          placeholder="Search driver..."
+                          value={driverSearchQuery}
+                          onChange={(e) => setDriverSearchQuery(e.target.value)}
+                          autoFocus
+                        />
+                        <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                          {filteredDriverOptions.length > 0 ? (
+                            filteredDriverOptions.map(driver => (
+                              <div
+                                key={driver.id}
+                                onClick={() => {
+                                  setNewDriverName(driver.name);
+                                  setIsDriverDropdownOpen(false);
+                                  setDriverSearchQuery('');
+                                }}
+                                style={{
+                                  padding: '8px 10px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  backgroundColor: newDriverName === driver.name ? 'rgba(0, 35, 111, 0.06)' : 'transparent',
+                                  fontSize: '13px'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = newDriverName === driver.name ? 'rgba(0, 35, 111, 0.06)' : 'transparent'}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{driver.name}</span>
+                                  <span style={{ fontSize: '11px', color: '#64748b' }}>{driver.license} • {driver.status}</span>
+                                </div>
+                                {newDriverName === driver.name && <Check size={15} style={{ color: 'var(--primary-brand)' }} />}
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ padding: '8px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>No drivers match search</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Searchable Bus ID Dropdown */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left', position: 'relative' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Assigned Bus ID</label>
+                    <div 
+                      onClick={() => {
+                        setIsBusDropdownOpen(!isBusDropdownOpen);
+                        setIsDriverDropdownOpen(false);
+                      }}
+                      style={{
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(197, 197, 211, 0.5)',
+                        backgroundColor: '#ffffff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: '13px',
+                        fontWeight: newBusId ? 600 : 400,
+                        color: newBusId ? 'var(--text-dark)' : '#94a3b8'
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        <Bus size={15} style={{ color: 'var(--primary-brand)', flexShrink: 0 }} />
+                        {newBusId || 'Select Bus...'}
+                      </span>
+                      <ChevronDown size={14} style={{ color: '#64748b', flexShrink: 0 }} />
+                    </div>
+
+                    {isBusDropdownOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: '4px',
+                        backgroundColor: '#ffffff',
+                        border: '1px solid rgba(197, 197, 211, 0.4)',
+                        borderRadius: '8px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
+                        zIndex: 100,
+                        padding: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <Input 
+                          type="text" 
+                          icon={<Search size={13} />}
+                          placeholder="Search bus number..."
+                          value={busSearchQuery}
+                          onChange={(e) => setBusSearchQuery(e.target.value)}
+                          autoFocus
+                        />
+                        <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                          {filteredBusOptions.length > 0 ? (
+                            filteredBusOptions.map(bus => {
+                              const isSelected = newBusId === bus.busNumber;
+                              const isDisabled = bus.isOverlapping && !isSelected;
+
+                              return (
+                                <div
+                                  key={bus.id}
+                                  onClick={() => {
+                                    if (isDisabled) return;
+                                    setNewBusId(bus.busNumber);
+                                    if (bus.capacity) setNewCapacityTotal(bus.capacity);
+                                    setIsBusDropdownOpen(false);
+                                    setBusSearchQuery('');
+                                  }}
+                                  style={{
+                                    padding: '8px 10px',
+                                    borderRadius: '6px',
+                                    cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    backgroundColor: isSelected ? 'rgba(0, 35, 111, 0.06)' : (isDisabled ? '#f8fafc' : 'transparent'),
+                                    opacity: isDisabled ? 0.6 : 1,
+                                    fontSize: '13px'
+                                  }}
+                                  title={isDisabled ? `Schedule conflict: ${bus.conflictInfo}` : ''}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ fontWeight: 600, color: isDisabled ? '#94a3b8' : 'var(--text-dark)' }}>{bus.busNumber}</span>
+                                      {isDisabled && (
+                                        <span style={{ fontSize: '10px', fontWeight: 600, color: '#dc2626', backgroundColor: '#fee2e2', padding: '1px 6px', borderRadius: '4px' }}>
+                                          ⚠️ Schedule Overlap
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span style={{ fontSize: '11px', color: '#64748b' }}>
+                                      {isDisabled ? `Conflicts with ${bus.conflictInfo}` : `Cap: ${bus.capacity} seats • ${bus.status}`}
+                                    </span>
+                                  </div>
+                                  {isSelected && <Check size={15} style={{ color: 'var(--primary-brand)' }} />}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div style={{ padding: '8px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>No buses match search</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Intuitive Time Window Picker */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={14} style={{ color: 'var(--primary-brand)' }} />
+                    Time Window ({newTimeWindow})
+                  </label>
+                  
+                  {/* Preset Shift Chips */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {PRESET_SHIFTS.map((shift, idx) => {
+                      const isActive = newTimeWindow === `${shift.start} - ${shift.end}`;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSelectPresetShift(shift)}
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            border: isActive ? '1px solid var(--primary-brand)' : '1px solid #cbd5e1',
+                            backgroundColor: isActive ? 'rgba(0, 35, 111, 0.08)' : '#f8fafc',
+                            color: isActive ? 'var(--primary-brand)' : '#475569',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {shift.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Start & End Time Dropdowns */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '2px' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>Start Time</span>
+                      <select 
+                        value={startTime} 
+                        onChange={(e) => handleSelectStartTime(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', backgroundColor: '#ffffff' }}
+                      >
+                        {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px' }}>End Time</span>
+                      <select 
+                        value={endTime} 
+                        onChange={(e) => handleSelectEndTime(e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', backgroundColor: '#ffffff' }}
+                      >
+                        {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Total Stops</label>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Total Capacity</label>
                   <Input 
                     type="number" 
-                    placeholder="e.g. 14"
-                    value={newStopsCount}
-                    onChange={(e) => setNewStopsCount(e.target.value)}
+                    placeholder="e.g. 50"
+                    value={newCapacityTotal}
+                    onChange={(e) => setNewCapacityTotal(e.target.value)}
                     required
                   />
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Total Capacity</label>
-                <Input 
-                  type="number" 
-                  placeholder="e.g. 50"
-                  value={newCapacityTotal}
-                  onChange={(e) => setNewCapacityTotal(e.target.value)}
-                  required
-                />
-              </div>
             </div>
 
             <div className="modal-footer">
-              <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)}>
+              <Button type="button" variant="secondary" disabled={createRouteMutation.isPending} onClick={() => setIsAddModalOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit">
-                Create Route
+              <Button type="submit" disabled={createRouteMutation.isPending || !newRouteName.trim() || !newDriverName.trim() || !newBusId.trim()}>
+                {createRouteMutation.isPending ? 'Creating Route...' : 'Create Route'}
               </Button>
             </div>
           </form>
@@ -661,6 +1069,60 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
               </Button>
               <Button type="submit" disabled={!renameInputValue.trim()}>
                 Save Route Name
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* --- Delete Route Confirmation Modal --- */}
+      {isDeleteModalOpen && selectedRouteForDelete && (
+        <div className="modal-overlay">
+          <form onSubmit={handleDeleteRouteSubmit} className="modal-card" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 style={{ color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Trash2 size={18} />
+                Delete Route
+              </h2>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setSelectedRouteForDelete(null);
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px', textAlign: 'left' }}>
+              <p style={{ margin: 0, fontSize: '14px', color: 'var(--text-dark)' }}>
+                Are you sure you want to delete <strong style={{ color: '#ef4444' }}>{selectedRouteForDelete.name}</strong>?
+              </p>
+              <p style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>
+                This action will permanently delete the route and all associated student stops from the database.
+              </p>
+            </div>
+
+            <div className="modal-footer">
+              <Button 
+                type="button" 
+                variant="secondary" 
+                disabled={deleteRouteMutation.isPending}
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setSelectedRouteForDelete(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={deleteRouteMutation.isPending}
+                style={{ backgroundColor: '#ef4444', borderColor: '#ef4444', color: '#ffffff' }}
+              >
+                {deleteRouteMutation.isPending ? 'Deleting Route...' : 'Confirm Delete'}
               </Button>
             </div>
           </form>

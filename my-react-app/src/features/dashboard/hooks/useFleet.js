@@ -66,3 +66,13 @@ export const useCreateBus = () => {
     },
   });
 };
+
+export const useUpdateBus = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, busData }) => dashboardService.updateBus(id, busData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['buses'] });
+    },
+  });
+};

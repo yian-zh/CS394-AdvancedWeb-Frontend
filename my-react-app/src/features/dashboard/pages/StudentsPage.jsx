@@ -8,7 +8,7 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useStudents, useCreateStudent, useUpdateStudent } from '../hooks/useStudents';
+import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent } from '../hooks/useStudents';
 import '../styles/dashboard.css';
 
 // Initial stats for Bento grid (static text as in Figma but dynamic total count)
@@ -22,6 +22,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   const { data: rawStudents = [], isLoading, error } = useStudents();
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
+  const deleteStudentMutation = useDeleteStudent();
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -40,8 +41,8 @@ const StudentsPage = ({ user, onSignOut }) => {
       const guardianPhoneStr = guardianUser ? guardianUser.phone_number : 'N/A';
       
       // Route details
-      const stop = s.stops && s.stops[0];
-      const assignedRouteStr = stop && stop.route ? stop.route.route_name : 'Unassigned';
+      const stopObj = s.stops && s.stops.length > 0 ? s.stops[0] : null;
+      const assignedRouteStr = stopObj ? (stopObj.route_name || stopObj.name || `Route #${stopObj.route_id || stopObj.id}`) : 'Unassigned';
 
       return {
         id: String(s.student_id),
@@ -70,6 +71,10 @@ const StudentsPage = ({ user, onSignOut }) => {
   const [gender, setGender] = useState('Male');
   const [phone, setPhone] = useState('');
   const [formErrors, setFormErrors] = useState({});
+
+  // Delete Confirmation State
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState(null);
 
   // Helper to extract initials
   const getInitials = (name) => {
@@ -207,7 +212,21 @@ const StudentsPage = ({ user, onSignOut }) => {
 
   // Delete student handler
   const handleDeleteStudent = (id) => {
-    alert('Student deletion is restricted to direct database administration to preserve historical log integrity.');
+    const student = students.find(s => s.id === id);
+    setStudentToDelete(student || { id });
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const confirmDeleteStudent = async () => {
+    if (!studentToDelete) return;
+    try {
+      await deleteStudentMutation.mutateAsync(studentToDelete.id);
+    } catch (err) {
+      console.warn('Delete student error:', err);
+    } finally {
+      setStudentToDelete(null);
+      setIsDeleteConfirmOpen(false);
+    }
   };
 
   return (
@@ -666,6 +685,50 @@ const StudentsPage = ({ user, onSignOut }) => {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteConfirmOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-container" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ color: '#ef4444' }}>⚠️ Delete Student</h2>
+            </div>
+            <div style={{ padding: '20px 0', color: 'var(--text-secondary)' }}>
+              Are you sure you want to permanently delete{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {studentToDelete?.name || 'this student'}
+              </strong>
+              ? This will also remove all their stop and guardian assignments. This action cannot be undone.
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setIsDeleteConfirmOpen(false); setStudentToDelete(null); }}
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                onClick={confirmDeleteStudent}
+                disabled={deleteStudentMutation.isPending}
+                style={{
+                  padding: '8px 20px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: deleteStudentMutation.isPending ? 'not-allowed' : 'pointer',
+                  opacity: deleteStudentMutation.isPending ? 0.7 : 1,
+                }}
+              >
+                {deleteStudentMutation.isPending ? 'Deleting...' : 'Delete Student'}
+              </button>
+            </div>
           </div>
         </div>
       )}

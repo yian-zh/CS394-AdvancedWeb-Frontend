@@ -80,6 +80,14 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
+  async deleteUser(id) {
+    const response = await fetch(`${API_URL}/users/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   // ==========================================
   // 🗃️ Student Directory
   // ==========================================
@@ -109,6 +117,14 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
+  async deleteStudent(id) {
+    const response = await fetch(`${API_URL}/students/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   async assignGuardian(assignmentData) {
     const response = await fetch(`${API_URL}/students/assign-guardian`, {
       method: 'POST',
@@ -132,6 +148,15 @@ export const dashboardService = {
   async createBus(busData) {
     const response = await fetch(`${API_URL}/buses`, {
       method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(busData),
+    });
+    return handleResponse(response);
+  },
+
+  async updateBus(id, busData) {
+    const response = await fetch(`${API_URL}/buses/${id}`, {
+      method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(busData),
     });
@@ -201,6 +226,14 @@ export const dashboardService = {
       method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(routeData),
+    });
+    return handleResponse(response);
+  },
+
+  async deleteRoute(id) {
+    const response = await fetch(`${API_URL}/routes/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
     });
     return handleResponse(response);
   },

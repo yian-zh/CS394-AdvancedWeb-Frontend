@@ -28,6 +28,16 @@ export const useUpdateRoute = () => {
   });
 };
 
+export const useDeleteRoute = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => dashboardService.deleteRoute(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['routes'] });
+    },
+  });
+};
+
 export const useManageStops = () => {
   const queryClient = useQueryClient();
   return useMutation({

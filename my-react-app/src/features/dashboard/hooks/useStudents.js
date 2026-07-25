@@ -37,3 +37,13 @@ export const useAssignGuardian = () => {
     },
   });
 };
+
+export const useDeleteStudent = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => dashboardService.deleteStudent(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+    },
+  });
+};

@@ -8,16 +8,21 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useUsers, useCreateUser } from '../hooks/useUsers';
+import { useUsers, useCreateUser, useDeleteUser } from '../hooks/useUsers';
 import '../styles/dashboard.css';
 
 const UserManagementPage = ({ user, onSignOut }) => {
   const { data: rawUsers = [], isLoading, error } = useUsers();
   const createUserMutation = useCreateUser();
+  const deleteUserMutation = useDeleteUser();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('All Users'); // 'All Users' | 'Drivers' | 'Guardians' | 'Administrators'
+  const [activeTab, setActiveTab] = useState('All Users');
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Delete Confirmation State
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
 
   // New User Form State
   const [newUserRole, setNewUserRole] = useState('Driver'); // Driver | Guardian | Administrator
@@ -350,6 +355,26 @@ const UserManagementPage = ({ user, onSignOut }) => {
                             )}
                           </div>
                         </td>
+                        <td>
+                          <button
+                            type="button"
+                            title="Delete User"
+                            onClick={() => { setUserToDelete(u); setIsDeleteConfirmOpen(true); }}
+                            style={{
+                              background: 'none',
+                              border: '1px solid #fca5a5',
+                              borderRadius: '6px',
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              padding: '4px 10px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))
                   ) : (
@@ -533,6 +558,60 @@ const UserManagementPage = ({ user, onSignOut }) => {
                 </Button>
               </footer>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteConfirmOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-container" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ color: '#ef4444' }}>⚠️ Delete User</h2>
+            </div>
+            <div style={{ padding: '20px 0', color: 'var(--text-secondary)' }}>
+              Are you sure you want to permanently delete{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {userToDelete?.name || 'this user'}
+              </strong>
+              ? This action cannot be undone.
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setIsDeleteConfirmOpen(false); setUserToDelete(null); }}
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!userToDelete) return;
+                  try {
+                    await deleteUserMutation.mutateAsync(userToDelete.id);
+                  } catch (err) {
+                    console.warn('Delete user error:', err);
+                  } finally {
+                    setUserToDelete(null);
+                    setIsDeleteConfirmOpen(false);
+                  }
+                }}
+                disabled={deleteUserMutation.isPending}
+                style={{
+                  padding: '8px 20px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: deleteUserMutation.isPending ? 'not-allowed' : 'pointer',
+                  opacity: deleteUserMutation.isPending ? 0.7 : 1,
+                }}
+              >
+                {deleteUserMutation.isPending ? 'Deleting...' : 'Delete User'}
+              </button>
+            </div>
           </div>
         </div>
       )}
