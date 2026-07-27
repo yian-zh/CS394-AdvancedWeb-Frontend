@@ -709,7 +709,7 @@ const StudentsPage = ({ user, onSignOut }) => {
                   ) : error ? (
                     <tr>
                       <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
-                        Error loading students: {error}
+                        Error loading students: {error.message || String(error)}
                       </td>
                     </tr>
                   ) : paginatedStudents.length > 0 ? (

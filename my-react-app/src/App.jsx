@@ -19,10 +19,10 @@ function App() {
   const handleSignOut = async () => {
     try {
       await authService.logout();
-      queryClient.clear();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      queryClient.clear();
       setUser(null);
     }
   };

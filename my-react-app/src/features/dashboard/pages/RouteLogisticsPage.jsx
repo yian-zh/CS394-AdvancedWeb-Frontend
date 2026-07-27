@@ -13,23 +13,7 @@ import { useBuses } from '../hooks/useFleet';
 import { useUsers } from '../hooks/useUsers';
 import '../styles/dashboard.css';
 
-const DEFAULT_DRIVERS = [
-  { id: 'd1', name: 'Marcus Sterling', license: '#7741', status: 'Available' },
-  { id: 'd2', name: 'Sarah Jenkins', license: '#7742', status: 'Assigned' },
-  { id: 'd3', name: 'Robert Miller', license: '#8829', status: 'Available' },
-  { id: 'd4', name: 'David Chen', license: '#9012', status: 'On Leave' },
-  { id: 'd5', name: 'Elena Rodriguez', license: '#1084', status: 'Assigned' },
-  { id: 'd6', name: 'John Doe', license: '#5519', status: 'Available' }
-];
-
-const DEFAULT_BUSES = [
-  { id: '#402-A', busNumber: '#402-A', capacity: 60, status: 'Active' },
-  { id: '#108', busNumber: '#108', capacity: 52, status: 'Active' },
-  { id: '#S-14', busNumber: '#S-14', capacity: 15, status: 'Special Ed' },
-  { id: '#402', busNumber: '#402', capacity: 45, status: 'Active' },
-  { id: '#882', busNumber: '#882', capacity: 50, status: 'Maintenance' },
-  { id: '#501-B', busNumber: '#501-B', capacity: 65, status: 'Active' }
-];
+const DEFAULT_DRIVERS = [];
 
 const TIME_OPTIONS = [
   '06:00 AM', '06:15 AM', '06:30 AM', '06:45 AM',
@@ -117,16 +101,27 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const driverOptions = useMemo(() => {
     if (rawUsers && rawUsers.length > 0) {
       const userDrivers = rawUsers
-        .filter(u => u.role === 'driver' || u.role === 'Admin' || u.role === 'admin')
+        .filter(u => {
+          const role = (u.role || '').toLowerCase();
+          return role === 'driver' || role === 'admin';
+        })
         .map(u => ({
           id: String(u.user_id),
-          name: `${u.first_name} ${u.last_name}`,
-          license: `#${Math.floor(1000 + Math.random() * 9000)}`,
-          status: 'Available'
+          user_id: u.user_id,
+          name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+          license: u.phone_number ? `Contact: ${u.phone_number}` : `#${u.user_id}`,
+          status: u.status === false ? 'On Leave' : 'Available'
         }));
       if (userDrivers.length > 0) return userDrivers;
+      return rawUsers.map(u => ({
+        id: String(u.user_id),
+        user_id: u.user_id,
+        name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+        license: u.phone_number ? `Contact: ${u.phone_number}` : `#${u.user_id}`,
+        status: u.status === false ? 'On Leave' : 'Available'
+      }));
     }
-    return DEFAULT_DRIVERS;
+    return [];
   }, [rawUsers]);
 
   const filteredDriverOptions = useMemo(() => {
@@ -135,17 +130,13 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
     return driverOptions.filter(d => d.name.toLowerCase().includes(q) || d.license.toLowerCase().includes(q));
   }, [driverOptions, driverSearchQuery]);
 
-  // Available buses list dynamically derived from backend buses or defaults
   const busOptions = useMemo(() => {
-    if (rawBuses && rawBuses.length > 0) {
-      return rawBuses.map(b => ({
-        id: `#${b.bus_number}`,
-        busNumber: `#${b.bus_number}`,
-        capacity: b.capacity || 50,
-        status: b.status || 'Active'
-      }));
-    }
-    return DEFAULT_BUSES;
+    return (rawBuses || []).map(b => ({
+      id: `#${b.bus_number}`,
+      busNumber: `#${b.bus_number}`,
+      capacity: b.capacity || 50,
+      status: b.availability_status ? (b.availability_status.charAt(0).toUpperCase() + b.availability_status.slice(1)) : 'Active'
+    }));
   }, [rawBuses]);
 
 
@@ -169,10 +160,27 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
   const routes = useMemo(() => {
     return rawRoutes.map(r => {
-      const initials = r.driver ? `${r.driver.first_name[0]}${r.driver.last_name[0]}`.toUpperCase() : 'JD';
-      const driverName = r.driver ? `${r.driver.first_name} ${r.driver.last_name}` : 'John Doe';
+      let driverName = 'Unassigned';
+      let initials = 'UN';
+
+      const savedDriver = localStorage.getItem(`sbms_route_driver_${r.route_id}`) || localStorage.getItem(`sbms_route_driver_route-${r.route_id}`);
+      if (savedDriver) {
+        driverName = savedDriver;
+        initials = savedDriver.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'DR';
+      } else if (r.driver) {
+        driverName = `${r.driver.first_name || ''} ${r.driver.last_name || ''}`.trim() || r.driver.username;
+        initials = `${(r.driver.first_name || 'D')[0]}${(r.driver.last_name || 'R')[0]}`.toUpperCase();
+      } else if (r.driver_id && rawUsers && rawUsers.length > 0) {
+        const found = rawUsers.find(u => String(u.user_id) === String(r.driver_id));
+        if (found) {
+          driverName = `${found.first_name || ''} ${found.last_name || ''}`.trim() || found.username;
+          initials = `${(found.first_name || 'D')[0]}${(found.last_name || 'R')[0]}`.toUpperCase();
+        }
+      }
       const routeIdStr = String(r.route_id);
       const name = routeOverrides[routeIdStr] || r.route_name;
+      const savedTimeWindow = localStorage.getItem(`sbms_route_timewindow_${routeIdStr}`) || localStorage.getItem(`sbms_route_timewindow_route-${routeIdStr}`);
+      const displayTimeWindow = savedTimeWindow || '07:00 AM - 08:30 AM';
 
       return {
         id: routeIdStr,
@@ -182,13 +190,13 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
         driver: driverName,
         driverInitials: initials,
         busId: r.buses && r.buses[0] ? `#${r.buses[0].bus_number}` : '#402-A',
-        timeWindow: '07:00 AM - 08:30 AM',
+        timeWindow: displayTimeWindow,
         stopsCount: r.students ? r.students.length + 2 : 10,
         capacityUsed: r.students ? r.students.length : 12,
         capacityTotal: 60
       };
     });
-  }, [rawRoutes, routeOverrides]);
+  }, [rawRoutes, routeOverrides, rawUsers]);
 
   const busOptionsWithSchedule = useMemo(() => {
     return busOptions.map(b => {
@@ -223,20 +231,35 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
     if (!newRouteName.trim() || !newDriverName.trim() || !newBusId.trim()) return;
 
     try {
+      const selectedDriverObj = driverOptions.find(d => d.name === newDriverName);
+      const driverIdNum = selectedDriverObj?.user_id || selectedDriverObj?.id || selectedDriverObj?.driver_id;
+
       const routeData = {
         route_name: newRouteName.trim(),
         start_location: 'School',
         end_location: 'School',
-        estimated_duration: 45
+        estimated_duration: 45,
+        driver_id: driverIdNum || null,
       };
 
-      await createRouteMutation.mutateAsync(routeData);
+      const result = await createRouteMutation.mutateAsync(routeData);
+      const createdRoute = result.route || result;
+      const createdId = createdRoute?.route_id || createdRoute?.id;
+      if (createdId) {
+        localStorage.setItem(`sbms_route_timewindow_${createdId}`, newTimeWindow);
+        if (selectedDriverObj) {
+          localStorage.setItem(`sbms_route_driver_${createdId}`, selectedDriverObj.name);
+        }
+      }
+
       setIsAddModalOpen(false);
 
       // Reset Form
       setNewRouteName('');
       setNewDriverName('');
       setNewBusId('');
+      setStartTime('07:00 AM');
+      setEndTime('08:30 AM');
       setNewTimeWindow('07:00 AM - 08:30 AM');
       setNewStopsCount('');
       setNewCapacityTotal('');
@@ -485,7 +508,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
               </div>
             ) : error ? (
               <div style={{ textAlign: 'center', padding: '32px', gridColumn: '1 / -1', color: '#dc2626' }}>
-                Error loading routes: {error}
+                Error loading routes: {error.message || String(error)}
               </div>
             ) : (
               filteredRoutes.map(route => {

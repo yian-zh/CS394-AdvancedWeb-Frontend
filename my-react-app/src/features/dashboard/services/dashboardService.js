@@ -32,7 +32,11 @@ const handleResponse = async (response) => {
   const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
-    const errorMsg = data?.message || `HTTP error! status: ${response.status}`;
+    if (response.status === 401) {
+      localStorage.removeItem('sbms_token');
+      localStorage.removeItem('sbms_user');
+    }
+    const errorMsg = data?.message || (response.status === 401 ? 'Unauthenticated. Please log in again.' : `HTTP error! status: ${response.status}`);
     const error = new Error(errorMsg);
     error.status = response.status;
     error.data = data;

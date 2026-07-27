@@ -46,11 +46,15 @@ export const authService = {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: getHeaders(),
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, portal: 'admin' }),
     });
 
     const data = await handleResponse(response);
     
+    if (data.user && data.user.role !== 'admin') {
+      throw new Error('Access denied. Only administrators can log in to the admin portal.');
+    }
+
     if (data.token && data.user) {
       localStorage.setItem('sbms_token', data.token);
       localStorage.setItem('sbms_user', JSON.stringify(data.user));
@@ -69,6 +73,8 @@ export const authService = {
         headers: getHeaders(),
       });
       await handleResponse(response);
+    } catch (err) {
+      console.warn('Backend logout warning (clearing local session):', err);
     } finally {
       localStorage.removeItem('sbms_token');
       localStorage.removeItem('sbms_user');

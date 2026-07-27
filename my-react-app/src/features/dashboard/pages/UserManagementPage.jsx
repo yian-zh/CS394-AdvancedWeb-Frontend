@@ -375,7 +375,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
                   ) : error ? (
                     <tr>
                       <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
-                        Error loading users: {error}
+                        Error loading users: {error.message || String(error)}
                       </td>
                     </tr>
                   ) : filteredUsers.length > 0 ? (

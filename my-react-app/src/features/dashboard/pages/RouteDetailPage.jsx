@@ -4,7 +4,7 @@ import {
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, MapPin, 
   GraduationCap, Check, X, ArrowLeft, User, Trash2, GripVertical,
-  MoreVertical, Pencil, UserPlus, DollarSign
+  MoreVertical, Pencil, UserPlus, DollarSign, Loader2, UserX
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -12,6 +12,7 @@ import Input from '../../../components/ui/Input';
 import { useRoutes, useManageStops, useUpdateRoute, useDeleteRoute, useAssignBusToRoute } from '../hooks/useRoutes';
 import { useStudents, useCreateStudent } from '../hooks/useStudents';
 import { useBuses } from '../hooks/useFleet';
+import { useUsers } from '../hooks/useUsers';
 import LocationPinPicker from '../components/LocationPinPicker';
 import RouteOverviewMap from '../components/RouteOverviewMap';
 import '../styles/dashboard.css';
@@ -127,11 +128,7 @@ const ROUTE_DETAILS = {
   }
 };
 
-const INITIAL_DRIVERS = [
-  { id: 'Robert Miller', number: '#8829', license: 'Class A CDL', expiry: '10/24', status: 'Available', avatar: 'RM' },
-  { id: 'Sarah Jenkins', number: '#7741', license: 'Class B CDL', expiry: '12/25', status: 'Assigned', avatar: 'SJ' },
-  { id: 'David Chen', number: '#9012', license: 'Class A CDL', expiry: '05/26', status: 'On Leave', avatar: 'DC' }
-];
+const INITIAL_DRIVERS = [];
 
 const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const { routeId } = useParams();
@@ -141,6 +138,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const { data: rawRoutes = [], isLoading: isQueryLoading, error: queryError } = useRoutes();
   const { data: rawStudents = [], isLoading: isStudentsLoading } = useStudents();
   const { data: rawBuses = [] } = useBuses();
+  const { data: rawUsers = [] } = useUsers();
   const createStudentMutation = useCreateStudent();
   const manageStopsMutation = useManageStops();
   const updateRouteMutation = useUpdateRoute();
@@ -148,9 +146,17 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const assignBusMutation = useAssignBusToRoute();
 
   const [stops, setStops] = useState([]);
-  const [customStops, setCustomStops] = useState([]);
+  const [customStops, setCustomStops] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`sbms_route_custom_stops_${routeId}`);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [selectedStopId, setSelectedStopId] = useState(1);
   const [activeDriver, setActiveDriver] = useState('');
+  const [assigningDriverId, setAssigningDriverId] = useState(null);
   const [activeBus, setActiveBus] = useState('#402-A');
   const [capacityUsed, setCapacityUsed] = useState(0);
   const [capacityTotal, setCapacityTotal] = useState(60);
@@ -166,28 +172,16 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const [isDeleteRouteModalOpen, setIsDeleteRouteModalOpen] = useState(false);
   const [renameInputValue, setRenameInputValue] = useState('');
 
-  const DEFAULT_BUS_LIST = useMemo(() => [
-    { id: 1, bus_id: 1, bus_number: '402-A', busNumber: '#402-A', capacity: 60, status: 'Active' },
-    { id: 2, bus_id: 2, bus_number: '108', busNumber: '#108', capacity: 52, status: 'Active' },
-    { id: 3, bus_id: 3, bus_number: 'S-14', busNumber: '#S-14', capacity: 15, status: 'Special Ed' },
-    { id: 4, bus_id: 4, bus_number: '402', busNumber: '#402', capacity: 45, status: 'Active' },
-    { id: 5, bus_id: 5, bus_number: '882', busNumber: '#882', capacity: 50, status: 'Maintenance' },
-    { id: 6, bus_id: 6, bus_number: '501-B', busNumber: '#501-B', capacity: 65, status: 'Active' }
-  ], []);
-
   const busOptions = useMemo(() => {
-    if (rawBuses && rawBuses.length > 0) {
-      return rawBuses.map(b => ({
-        id: b.bus_id,
-        bus_id: b.bus_id,
-        bus_number: b.bus_number,
-        busNumber: `#${b.bus_number}`,
-        capacity: b.capacity || 50,
-        status: b.status || 'Active'
-      }));
-    }
-    return DEFAULT_BUS_LIST;
-  }, [rawBuses, DEFAULT_BUS_LIST]);
+    return (rawBuses || []).map(b => ({
+      id: b.bus_id,
+      bus_id: b.bus_id,
+      bus_number: b.bus_number,
+      busNumber: `#${b.bus_number}`,
+      capacity: b.capacity || 50,
+      status: b.availability_status ? (b.availability_status.charAt(0).toUpperCase() + b.availability_status.slice(1)) : 'Active'
+    }));
+  }, [rawBuses]);
 
   const busOptionsWithSchedule = useMemo(() => {
     const currentRouteTime = '07:00 AM - 08:30 AM';
@@ -252,7 +246,41 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     setBusSearchTerm('');
   };
 
-  const displayRouteName = routeNameOverride || currentRoute.name;
+  const matchedRoute = useMemo(() => {
+    if (rawRoutes && rawRoutes.length > 0) {
+      const found = rawRoutes.find(r => 
+        String(r.route_id) === String(routeId) || 
+        `route-${r.route_id}` === String(routeId)
+      );
+      if (found) return found;
+    }
+    return null;
+  }, [rawRoutes, routeId]);
+
+  const displayRouteName = useMemo(() => {
+    if (routeNameOverride) return routeNameOverride;
+
+    try {
+      const storedName = localStorage.getItem(`sbms_route_name_${routeId}`);
+      if (storedName) return storedName;
+      const numId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+      if (numId) {
+        const storedNum = localStorage.getItem(`sbms_route_name_${numId}`);
+        if (storedNum) return storedNum;
+      }
+    } catch (e) {}
+
+    if (matchedRoute && matchedRoute.route_name) {
+      return matchedRoute.route_name;
+    }
+
+    if (ROUTE_DETAILS[routeId] && ROUTE_DETAILS[routeId].name) {
+      return ROUTE_DETAILS[routeId].name;
+    }
+
+    const cleanId = String(routeId).replace('route-', '');
+    return `Route ${cleanId}`;
+  }, [routeNameOverride, routeId, matchedRoute]);
 
   const handleOpenRenameRouteModal = () => {
     setRenameInputValue(displayRouteName);
@@ -310,38 +338,21 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [selectedStudentObj, setSelectedStudentObj] = useState(null);
 
-  const DEFAULT_STUDENT_ROSTER = useMemo(() => [
-    { id: 'st_1', name: 'Lucas Vance', grade: 'Grade 3', avatar: 'LV' },
-    { id: 'st_2', name: 'Sophia Chen', grade: 'Grade 5', avatar: 'SC' },
-    { id: 'st_3', name: 'Ethan Miller', grade: 'Grade 2', avatar: 'EM' },
-    { id: 'st_4', name: 'Chloe Sterling', grade: 'Grade 4', avatar: 'CS' },
-    { id: 'st_5', name: 'Oliver Jenkins', grade: 'Grade 1', avatar: 'OJ' },
-    { id: 'st_6', name: 'Emma Watson', grade: 'Grade 6', avatar: 'EW' },
-    { id: 'st_7', name: 'Liam Vance', grade: 'Grade 3', avatar: 'LV' },
-    { id: 'st_8', name: 'Noah Rodriguez', grade: 'Grade 4', avatar: 'NR' },
-    { id: 'st_9', name: 'Mia Vance', grade: 'Grade 2', avatar: 'MV' },
-    { id: 'st_10', name: 'Aiden Chen', grade: 'Grade 5', avatar: 'AC' },
-    { id: 'st_11', name: 'Benjamin Vance', grade: 'Grade 1', avatar: 'BV' },
-    { id: 'st_12', name: 'Charlotte Chen', grade: 'Grade 3', avatar: 'CC' },
-    { id: 'st_13', name: 'Henry Sterling', grade: 'Grade 5', avatar: 'HS' },
-    { id: 'st_14', name: 'Amelia Miller', grade: 'Grade 4', avatar: 'AM' }
-  ], []);
-
   const studentDirectory = useMemo(() => {
-    if (rawStudents.length > 0) {
+    if (rawStudents && rawStudents.length > 0) {
       return rawStudents.map(s => {
-        const fullName = `${s.first_name} ${s.last_name}`;
+        const fullName = `${s.first_name || ''} ${s.last_name || ''}`.trim() || `Student #${s.student_id}`;
         return {
           id: String(s.student_id),
           student_id: s.student_id,
           name: fullName,
-          grade: s.grade_level || 'Grade 3',
+          grade: s.grade_level || 'Student',
           avatar: getInitials(fullName)
         };
       });
     }
-    return DEFAULT_STUDENT_ROSTER;
-  }, [rawStudents, DEFAULT_STUDENT_ROSTER]);
+    return [];
+  }, [rawStudents]);
 
   const filteredStudents = useMemo(() => {
     if (!studentSearchTerm.trim()) return studentDirectory;
@@ -418,9 +429,46 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
           uiStops.push(startStop);
         }
 
+        // Merge backend student_stops if available
+        if (matched.stops && matched.stops.length > 0) {
+          matched.stops.forEach((st, idx) => {
+            const stopAddr = st.stop_address || 'Stop Address';
+            const isStart = stopAddr.toLowerCase() === (matched.start_location || '').toLowerCase();
+            const isEnd = stopAddr.toLowerCase() === (matched.end_location || '').toLowerCase();
+            if (!isStart && !isEnd) {
+              const stopObj = {
+                id: st.student_stop_id || `backend_stop_${idx}`,
+                name: stopAddr,
+                address: stopAddr,
+                type: 'stop',
+                lat: 11.556278 + (idx * 0.005),
+                lng: 104.928222 + (idx * 0.005),
+                pinCategory: 'Stop Location',
+                students: st.student ? [{
+                  id: String(st.student.student_id),
+                  student_id: st.student.student_id,
+                  name: `${st.student.first_name} ${st.student.last_name}`,
+                  grade: st.student.grade_level || 'Grade 3',
+                  avatar: getInitials(`${st.student.first_name} ${st.student.last_name}`)
+                }] : []
+              };
+              const exists = uiStops.some(s => s.address && s.address.toLowerCase() === stopAddr.toLowerCase());
+              if (!exists) {
+                uiStops.push(stopObj);
+              }
+            }
+          });
+        }
+
         // Merge custom intermediate stops created by user that are not already present in uiStops
-        if (customStops && customStops.length > 0) {
-          customStops.forEach(cs => {
+        let savedCustomStops = customStops;
+        try {
+          const stored = localStorage.getItem(`sbms_route_custom_stops_${routeId}`);
+          if (stored) savedCustomStops = JSON.parse(stored);
+        } catch (e) {}
+
+        if (savedCustomStops && savedCustomStops.length > 0) {
+          savedCustomStops.forEach(cs => {
             const exists = uiStops.some(s => 
               String(s.id) === String(cs.id) || 
               (s.address && cs.address && s.address.toLowerCase() === cs.address.toLowerCase() && s.name.toLowerCase() === cs.name.toLowerCase())
@@ -433,9 +481,52 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
         
         uiStops.push({ id: 'end', name: matched.end_location, address: matched.end_location, type: 'arrival', lat: 11.568321, lng: 104.890694, pinCategory: 'Destination School' });
 
+        const resolveDriverName = (matchedRoute) => {
+          const numericId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+          let savedDriver = null;
+          if (numericId) {
+            savedDriver = localStorage.getItem(`sbms_route_driver_${numericId}`);
+          }
+          if (!savedDriver && routeId) {
+            savedDriver = localStorage.getItem(`sbms_route_driver_${routeId}`);
+          }
+          if (savedDriver) return savedDriver;
+
+          if (matchedRoute && matchedRoute.driver) {
+            const d = matchedRoute.driver;
+            const fn = `${d.first_name || ''} ${d.last_name || ''}`.trim() || d.username;
+            if (fn) return fn;
+          }
+
+          if (matchedRoute && matchedRoute.driver_id && rawUsers && rawUsers.length > 0) {
+            const found = rawUsers.find(u => String(u.user_id) === String(matchedRoute.driver_id));
+            if (found) {
+              const fn = `${found.first_name || ''} ${found.last_name || ''}`.trim() || found.username;
+              if (fn) return fn;
+            }
+          }
+
+          return 'Unassigned';
+        };
+
+        const resolvedDriverName = resolveDriverName(matched);
+
+        try {
+          const fullSaved = localStorage.getItem(`sbms_route_stops_${routeId}`);
+          if (fullSaved) {
+            const parsedFull = JSON.parse(fullSaved);
+            if (Array.isArray(parsedFull) && parsedFull.length > 0) {
+              setStops(parsedFull);
+              setSelectedStopId(parsedFull[0]?.id || 'start');
+              setActiveDriver(resolvedDriverName);
+              return;
+            }
+          }
+        } catch (e) {}
+
         setStops(uiStops);
         setSelectedStopId(uiStops[0]?.id || 'start');
-        setActiveDriver(matched.driver ? `${matched.driver.first_name} ${matched.driver.last_name}` : 'Sarah Jenkins');
+        setActiveDriver(resolvedDriverName);
         if (matched.buses && matched.buses.length > 0) {
           setActiveBus(`#${matched.buses[0].bus_number}`);
           if (matched.buses[0].capacity) setCapacityTotal(matched.buses[0].capacity);
@@ -463,15 +554,20 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
       setCapacityUsed(currentRoute.capacityUsed);
       setCapacityTotal(currentRoute.capacityTotal);
     }
-  }, [rawRoutes, isQueryLoading, routeId, currentRoute]);
+  }, [rawRoutes, isQueryLoading, routeId, currentRoute, rawUsers]);
 
-  // Modal triggers
+  // Modals state
   const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
+  const [isAddingStop, setIsAddingStop] = useState(false);
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
   const [stopToDelete, setStopToDelete] = useState(null);
   const [draggedIndex, setDraggedIndex] = useState(null);
+
+  const [isRemoveStudentModalOpen, setIsRemoveStudentModalOpen] = useState(false);
+  const [studentToRemoveData, setStudentToRemoveData] = useState(null);
+  const [isRemovingStudent, setIsRemovingStudent] = useState(false);
 
   // Modal form states
   const [selectedPresetPinId, setSelectedPresetPinId] = useState('wat-phnom');
@@ -553,7 +649,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
       }
     }
 
-    const validPayloadStops = payloadStops.filter(s => s.student_id !== null && s.student_id !== undefined && Number(s.student_id) > 0);
+    const validPayloadStops = payloadStops.filter(s => s.stop_address && String(s.stop_address).trim().length > 0);
 
     if (validPayloadStops.length > 0) {
       try {
@@ -586,6 +682,23 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     });
 
     setStops(updatedStops);
+    try {
+      localStorage.setItem(`sbms_route_stops_${routeId}`, JSON.stringify(updatedStops));
+      const updatedCustom = customStops.map(cs => {
+        if (cs.id === editingStop.id) {
+          return {
+            ...cs,
+            name: editStopName.trim(),
+            address: editStopAddress.trim() || 'Phnom Penh Location',
+            lat: editStopLat ? parseFloat(editStopLat) : cs.lat,
+            lng: editStopLng ? parseFloat(editStopLng) : cs.lng
+          };
+        }
+        return cs;
+      });
+      setCustomStops(updatedCustom);
+      localStorage.setItem(`sbms_route_custom_stops_${routeId}`, JSON.stringify(updatedCustom));
+    } catch (e) {}
     await syncStopsWithBackend(updatedStops);
 
     setIsEditStopModalOpen(false);
@@ -616,25 +729,34 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   };
 
   const handleAssignDriver = async (driverInput) => {
+    if (assigningDriverId !== null) return; // Prevent double clicks
+
     let nameStr = '';
     let driverIdNum = null;
+    let targetId = null;
 
     if (typeof driverInput === 'string') {
       nameStr = driverInput;
+      targetId = driverInput;
     } else if (driverInput && typeof driverInput === 'object') {
-      nameStr = driverInput.name || `${driverInput.first_name} ${driverInput.last_name}`;
+      nameStr = driverInput.name || `${driverInput.first_name || ''} ${driverInput.last_name || ''}`.trim();
       driverIdNum = driverInput.user_id || driverInput.id;
+      targetId = driverInput.id || driverInput.user_id;
     }
+
+    setAssigningDriverId(targetId);
 
     if (nameStr) setActiveDriver(nameStr);
 
     const numericRouteId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+    const matchedRoute = rawRoutes.find(r => `route-${r.route_id}` === routeId || String(r.route_id) === routeId || r.route_id === numericRouteId);
+    const finalRouteId = matchedRoute?.route_id || numericRouteId;
 
-    if (numericRouteId && !isNaN(numericRouteId) && driverIdNum) {
+    if (finalRouteId && driverIdNum) {
       try {
         await updateRouteMutation.mutateAsync({
-          id: numericRouteId,
-          routeData: { driver_id: driverIdNum }
+          id: Number(finalRouteId),
+          routeData: { driver_id: Number(driverIdNum) }
         });
       } catch (err) {
         console.warn('Backend driver assignment sync note:', err);
@@ -670,105 +792,168 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
       }
     }
 
-    setIsDriverModalOpen(false);
+    setTimeout(() => {
+      setAssigningDriverId(null);
+      setIsDriverModalOpen(false);
+    }, 450);
+  };
+
+  const handleRemoveDriver = async () => {
+    if (assigningDriverId !== null) return;
+    setAssigningDriverId('remove');
+
+    setActiveDriver('Unassigned');
+
+    const numericRouteId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+    const matchedRoute = rawRoutes.find(r => `route-${r.route_id}` === routeId || String(r.route_id) === routeId || r.route_id === numericRouteId);
+    const finalRouteId = matchedRoute?.route_id || numericRouteId;
+
+    if (finalRouteId) {
+      try {
+        await updateRouteMutation.mutateAsync({
+          id: Number(finalRouteId),
+          routeData: { driver_id: null }
+        });
+      } catch (err) {
+        console.warn('Backend driver unassign sync note:', err);
+      }
+    }
+
+    try {
+      if (finalRouteId) {
+        localStorage.removeItem(`sbms_route_driver_${finalRouteId}`);
+        localStorage.removeItem(`sbms_route_driver_route-${finalRouteId}`);
+      }
+      if (routeId) {
+        localStorage.removeItem(`sbms_route_driver_${routeId}`);
+      }
+
+      const saved = localStorage.getItem('bus_override_#402-A');
+      let parsed = {};
+      if (saved) {
+        try { parsed = JSON.parse(saved); } catch (e) {}
+      }
+      parsed.driver = 'Unassigned';
+      localStorage.setItem('bus_override_#402-A', JSON.stringify(parsed));
+    } catch (e) {}
+
+    setTimeout(() => {
+      setAssigningDriverId(null);
+      setIsDriverModalOpen(false);
+    }, 400);
   };
 
   const handleAddStop = async (e) => {
     e.preventDefault();
-    if (!newStopName.trim()) return;
+    if (!newStopName.trim() || isAddingStop) return;
 
-    const numericIds = stops.map(s => (typeof s.id === 'number' ? s.id : parseInt(s.id, 10) || 0));
-    const maxId = numericIds.length > 0 ? Math.max(...numericIds, 0) : 0;
-    const newId = maxId + 1;
+    setIsAddingStop(true);
+    try {
+      const numericIds = stops.map(s => (typeof s.id === 'number' ? s.id : parseInt(s.id, 10) || 0));
+      const maxId = numericIds.length > 0 ? Math.max(...numericIds, 0) : 0;
+      const newId = maxId + 1;
 
-    const selectedPreset = PHNOM_PENH_PIN_PRESETS.find(p => p.id === selectedPresetPinId);
+      const selectedPreset = PHNOM_PENH_PIN_PRESETS.find(p => p.id === selectedPresetPinId);
 
-    const newStop = {
-      id: newId,
-      name: newStopName.trim(),
-      address: newStopAddress.trim() || 'Phnom Penh Location',
-      type: 'stop',
-      lat: newStopLat ? parseFloat(newStopLat) : null,
-      lng: newStopLng ? parseFloat(newStopLng) : null,
-      pinCategory: selectedPresetPinId !== 'custom-pin' ? (selectedPreset?.category || 'Landmark') : 'Custom Pin'
-    };
+      const newStop = {
+        id: newId,
+        name: newStopName.trim(),
+        address: newStopAddress.trim() || 'Phnom Penh Location',
+        type: 'stop',
+        lat: newStopLat ? parseFloat(newStopLat) : null,
+        lng: newStopLng ? parseFloat(newStopLng) : null,
+        pinCategory: selectedPresetPinId !== 'custom-pin' ? (selectedPreset?.category || 'Landmark') : 'Custom Pin'
+      };
 
-    let updatedStops = [...stops];
-    if (insertIndex !== null) {
-      updatedStops.splice(insertIndex, 0, newStop);
-    } else {
-      // Insert right before arrival stop
-      const arrivalIdx = updatedStops.findIndex(s => s.type === 'arrival');
-      if (arrivalIdx !== -1) {
-        updatedStops.splice(arrivalIdx, 0, newStop);
+      let updatedStops = [...stops];
+      if (insertIndex !== null) {
+        updatedStops.splice(insertIndex, 0, newStop);
       } else {
-        updatedStops.push(newStop);
+        // Insert right before arrival stop
+        const arrivalIdx = updatedStops.findIndex(s => s.type === 'arrival');
+        if (arrivalIdx !== -1) {
+          updatedStops.splice(arrivalIdx, 0, newStop);
+        } else {
+          updatedStops.push(newStop);
+        }
       }
+
+      setStops(updatedStops);
+      setSelectedStopId(newId);
+      const updatedCustom = [...customStops.filter(s => String(s.id) !== String(newStop.id)), newStop];
+      setCustomStops(updatedCustom);
+      try {
+        localStorage.setItem(`sbms_route_custom_stops_${routeId}`, JSON.stringify(updatedCustom));
+        localStorage.setItem(`sbms_route_stops_${routeId}`, JSON.stringify(updatedStops));
+      } catch (e) {}
+      await syncStopsWithBackend(updatedStops);
+
+      setNewStopName('');
+      setNewStopAddress('');
+      setNewStopLat('');
+      setNewStopLng('');
+      setInsertIndex(null);
+      setIsStopModalOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsAddingStop(false);
     }
+  };
+
+  const handleRemoveStudentFromStop = async (stopId, studentToRemove) => {
+    let totalPassengers = 0;
+    const updatedStops = stops.map(s => {
+      if (String(s.id) === String(stopId)) {
+        const existingStudents = s.students || [];
+        const updated = existingStudents.filter(st => 
+          String(st.id || st.student_id) !== String(studentToRemove.id || studentToRemove.student_id) &&
+          st.name !== studentToRemove.name
+        );
+        totalPassengers += updated.length;
+        return { ...s, students: updated };
+      }
+      totalPassengers += (s.students ? s.students.length : 0);
+      return s;
+    });
 
     setStops(updatedStops);
-    setSelectedStopId(newId);
-    setCustomStops(prev => {
-      const exists = prev.some(s => s.id === newStop.id);
-      return exists ? prev : [...prev, newStop];
-    });
-    await syncStopsWithBackend(updatedStops);
+    setCapacityUsed(totalPassengers);
+    try {
+      localStorage.setItem(`sbms_route_stops_${routeId}`, JSON.stringify(updatedStops));
+    } catch (e) {}
 
-    setNewStopName('');
-    setNewStopAddress('');
-    setNewStopLat('');
-    setNewStopLng('');
-    setInsertIndex(null);
-    setIsStopModalOpen(false);
+    await syncStopsWithBackend(updatedStops);
+  };
+
+  const handleConfirmRemoveStudent = async () => {
+    if (!studentToRemoveData || isRemovingStudent) return;
+    setIsRemovingStudent(true);
+    try {
+      await handleRemoveStudentFromStop(studentToRemoveData.stopId, studentToRemoveData.student);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsRemovingStudent(false);
+      setIsRemoveStudentModalOpen(false);
+      setStudentToRemoveData(null);
+    }
   };
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
-    if (!selectedStudentStopId) return;
+    if (!selectedStudentStopId || !selectedStudentObj) return;
 
-    let studentToAssign = selectedStudentObj;
-
-    // If custom student name entered, create student in backend PostgreSQL DB first
-    if (!studentToAssign && newStudentName.trim()) {
-      const nameTrimmed = newStudentName.trim();
-      const parts = nameTrimmed.split(' ');
-      const firstName = parts[0];
-      const lastName = parts.slice(1).join(' ') || 'Student';
-
-      try {
-        const res = await createStudentMutation.mutateAsync({
-          first_name: firstName,
-          last_name: lastName,
-          student_code: `STU-${Math.floor(1000 + Math.random() * 9000)}`,
-          date_of_birth: '2016-01-01',
-          grade_level: 'Grade 3'
-        });
-        const createdStudent = res.student || res;
-        studentToAssign = {
-          id: String(createdStudent.student_id),
-          student_id: createdStudent.student_id,
-          name: `${createdStudent.first_name} ${createdStudent.last_name}`,
-          grade: createdStudent.grade_level || 'Grade 3',
-          avatar: getInitials(`${createdStudent.first_name} ${createdStudent.last_name}`)
-        };
-      } catch (err) {
-        console.warn('Could not create student in backend DB, using fallback object:', err);
-        studentToAssign = {
-          id: `std_${Date.now()}`,
-          name: nameTrimmed,
-          grade: 'Grade 3',
-          avatar: getInitials(nameTrimmed)
-        };
-      }
-    }
-
-    if (!studentToAssign) return;
+    const studentToAssign = selectedStudentObj;
 
     let totalPassengers = 0;
     const updatedStops = stops.map(s => {
       if (String(s.id) === String(selectedStudentStopId)) {
         const existingStudents = s.students || [];
-        const exists = existingStudents.some(st => String(st.id) === String(studentToAssign.id) || st.name === studentToAssign.name);
+        const exists = existingStudents.some(st => 
+          String(st.id || st.student_id) === String(studentToAssign.id || studentToAssign.student_id) || 
+          st.name === studentToAssign.name
+        );
         const updated = exists ? existingStudents : [...existingStudents, studentToAssign];
         totalPassengers += updated.length;
         return { ...s, students: updated };
@@ -779,10 +964,12 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
 
     setStops(updatedStops);
     setCapacityUsed(totalPassengers);
+    try {
+      localStorage.setItem(`sbms_route_stops_${routeId}`, JSON.stringify(updatedStops));
+    } catch (e) {}
 
     await syncStopsWithBackend(updatedStops);
 
-    setNewStudentName('');
     setStudentSearchTerm('');
     setSelectedStudentObj(null);
     setSelectedStudentStopId('');
@@ -794,7 +981,13 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     const stopId = stopToDelete.id;
     const updatedStops = stops.filter(s => s.id !== stopId);
     setStops(updatedStops);
-    setCustomStops(prev => prev.filter(s => s.id !== stopId));
+    const updatedCustom = customStops.filter(s => s.id !== stopId);
+    setCustomStops(updatedCustom);
+    try {
+      localStorage.setItem(`sbms_route_stops_${routeId}`, JSON.stringify(updatedStops));
+      localStorage.setItem(`sbms_route_custom_stops_${routeId}`, JSON.stringify(updatedCustom));
+    } catch (e) {}
+
     if (selectedStopId === stopId) {
       if (updatedStops.length > 0) {
         setSelectedStopId(updatedStops[0].id);
@@ -829,6 +1022,10 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
 
   const handleDragEnd = () => {
     setDraggedIndex(null);
+    try {
+      localStorage.setItem(`sbms_route_stops_${routeId}`, JSON.stringify(stops));
+    } catch (e) {}
+    syncStopsWithBackend(stops);
   };
 
   const openInsertStopModal = (index) => {
@@ -854,10 +1051,79 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     return currentRoute.mapUrl;
   };
 
-  const filteredDrivers = INITIAL_DRIVERS.filter(d => 
-    d.id.toLowerCase().includes(driverSearch.toLowerCase()) ||
-    d.number.includes(driverSearch)
-  );
+  const availableDrivers = useMemo(() => {
+    const currentRouteTime = '07:00 AM - 08:30 AM';
+    const currentNumericRouteId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
+
+    if (rawUsers && rawUsers.length > 0) {
+      const drivers = rawUsers.filter(u => {
+        const role = (u.role || '').toLowerCase();
+        return role === 'driver' || role === 'admin';
+      });
+
+      const listToUse = drivers.length > 0 ? drivers : rawUsers;
+
+      return listToUse.map(u => {
+        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || `User #${u.user_id}`;
+        const initials = getInitials(fullName);
+
+        // Detect if driver is already assigned to a different route with an overlapping schedule
+        const conflictingRoute = rawRoutes.find(r => {
+          const rNumId = r.route_id;
+          if (currentNumericRouteId && String(rNumId) === String(currentNumericRouteId)) return false;
+          if (String(r.route_id) === String(routeId) || `route-${r.route_id}` === routeId) return false;
+
+          const isAssignedToOtherRoute = 
+            String(r.driver_id) === String(u.user_id) || 
+            (r.driver && String(r.driver.user_id) === String(u.user_id));
+
+          if (!isAssignedToOtherRoute) return false;
+
+          const otherRouteTime = '07:00 AM - 08:30 AM';
+          return isTimeOverlapping(currentRouteTime, otherRouteTime);
+        });
+
+        let status = u.status === false ? 'On Leave' : 'Available';
+        let isOverlapping = false;
+        let conflictInfo = null;
+
+        if (conflictingRoute) {
+          isOverlapping = true;
+          status = 'Schedule Conflict';
+          conflictInfo = `Assigned to ${conflictingRoute.route_name || 'Route #' + conflictingRoute.route_id}`;
+        }
+
+        return {
+          id: String(u.user_id),
+          user_id: u.user_id,
+          name: fullName,
+          number: `#${u.user_id}`,
+          license: u.phone_number ? `Contact: ${u.phone_number}` : `Driver ID: ${u.user_id}`,
+          expiry: u.email || 'N/A',
+          status,
+          isOverlapping,
+          conflictInfo,
+          avatar: initials,
+          rawUserObj: u
+        };
+      });
+    }
+    return [];
+  }, [rawUsers, rawRoutes, routeId]);
+
+  const filteredDrivers = useMemo(() => {
+    let list = availableDrivers;
+    if (activeDriver && activeDriver !== 'Unassigned') {
+      list = list.filter(d => d.name.toLowerCase() !== activeDriver.toLowerCase() && String(d.user_id) !== String(assigningDriverId));
+    }
+    if (!driverSearch.trim()) return list;
+    const term = driverSearch.toLowerCase();
+    return list.filter(d =>
+      d.name.toLowerCase().includes(term) ||
+      d.number.toLowerCase().includes(term) ||
+      d.license.toLowerCase().includes(term)
+    );
+  }, [availableDrivers, driverSearch, activeDriver, assigningDriverId]);
 
   return (
     <div className="dashboard-layout">
@@ -1275,6 +1541,42 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                                         {st.avatar || getInitials(st.name)}
                                       </span>
                                       {st.name} {st.grade ? `(${st.grade})` : ''}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setStudentToRemoveData({ stopId: stop.id, student: st });
+                                          setIsRemoveStudentModalOpen(true);
+                                        }}
+                                        title={`Remove ${st.name} from route stop`}
+                                        style={{
+                                          border: 'none',
+                                          backgroundColor: '#fee2e2',
+                                          color: '#ef4444',
+                                          borderRadius: '50%',
+                                          width: '20px',
+                                          height: '20px',
+                                          cursor: 'pointer',
+                                          fontSize: '11px',
+                                          fontWeight: 'bold',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          marginLeft: '4px',
+                                          transition: 'all 0.15s ease',
+                                          flexShrink: 0
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#ef4444';
+                                          e.currentTarget.style.color = '#ffffff';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          e.currentTarget.style.backgroundColor = '#fee2e2';
+                                          e.currentTarget.style.color = '#ef4444';
+                                        }}
+                                      >
+                                        ✕
+                                      </button>
                                     </span>
                                   ))
                                 ) : (
@@ -1493,9 +1795,35 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                             Change
                           </button>
                         </div>
-                        <span style={{ fontSize: '12px', color: 'var(--icon-color)' }}>
-                          Driver: {activeDriver}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '12px', color: 'var(--icon-color)' }}>
+                            Driver: {activeDriver}
+                          </span>
+                          {activeDriver && activeDriver !== 'Unassigned' && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveDriver}
+                              title="Remove Driver"
+                              disabled={assigningDriverId !== null}
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                color: '#dc2626',
+                                backgroundColor: '#fef2f2',
+                                border: '1px solid #fca5a5',
+                                borderRadius: '4px',
+                                padding: '1px 6px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                            >
+                              <UserX size={11} />
+                              Unassign
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                     
@@ -1532,7 +1860,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
             <div className="modal-header">
               <div>
                 <h2>Assign Driver to Route</h2>
-                <p style={{ fontSize: '12px', color: 'var(--icon-color)', margin: '4px 0 0 0' }}>{currentRoute.name}</p>
+                <p style={{ fontSize: '12px', color: 'var(--icon-color)', margin: '4px 0 0 0' }}>{displayRouteName}</p>
               </div>
               <button type="button" className="modal-close-btn" onClick={() => setIsDriverModalOpen(false)}>
                 <X size={16} />
@@ -1552,51 +1880,113 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
-                <span className="modal-section-title" style={{ margin: '0 0 4px 0' }}>AVAILABLE DRIVERS</span>
-                {filteredDrivers.map(d => {
-                  const getStatusClass = (status) => {
-                    switch(status.toLowerCase()) {
-                      case 'available': return 'driver-badge-available';
-                      case 'assigned': return 'driver-badge-assigned';
-                      case 'on leave': return 'driver-badge-leave';
-                      default: return '';
-                    }
-                  };
-
-                  return (
-                    <div 
-                      key={d.id}
-                      onClick={() => d.status !== 'On Leave' && handleAssignDriver(d.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '12px',
-                        border: '1px solid rgba(197, 197, 211, 0.2)',
-                        borderRadius: '8px',
-                        cursor: d.status === 'On Leave' ? 'not-allowed' : 'pointer',
-                        opacity: d.status === 'On Leave' ? 0.6 : 1,
-                        backgroundColor: '#ffffff',
-                        transition: 'all 0.2s'
-                      }}
-                      className="driver-row-hover"
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(0, 35, 111, 0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 600, color: 'var(--primary-brand)' }}>
-                          {d.avatar}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-dark)' }}>{d.id}</span>
-                          <span style={{ fontSize: '11px', color: 'var(--icon-color)' }}>ID: {d.number} • {d.license} • Exp: {d.expiry}</span>
-                        </div>
+                {activeDriver && activeDriver !== 'Unassigned' && (
+                  <div
+                    onClick={() => assigningDriverId === null && handleRemoveDriver()}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
+                      border: '1px dashed #ef4444',
+                      borderRadius: '8px',
+                      cursor: assigningDriverId !== null ? 'not-allowed' : 'pointer',
+                      backgroundColor: '#fef2f2',
+                      marginBottom: '4px',
+                      transition: 'all 0.2s',
+                      pointerEvents: assigningDriverId !== null ? 'none' : 'auto'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#dc2626' }}>
+                      <UserX size={16} />
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700 }}>Unassign Current Driver</span>
+                        <span style={{ fontSize: '11px', opacity: 0.8 }}>Currently: {activeDriver}</span>
                       </div>
-
-                      <span className={`driver-status-badge ${getStatusClass(d.status)}`}>
-                        {d.status}
-                      </span>
                     </div>
-                  );
-                })}
+                    {assigningDriverId === 'remove' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#dc2626' }}>
+                        <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} />
+                        Removing...
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: '#dc2626', backgroundColor: '#ffffff', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
+                        Remove Driver
+                      </span>
+                    )}
+                  </div>
+                )}
+                <span className="modal-section-title" style={{ margin: '0 0 4px 0' }}>AVAILABLE DRIVERS</span>
+                {filteredDrivers.length === 0 ? (
+                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--icon-color)', fontSize: '13px' }}>
+                    {rawUsers.length === 0 ? 'No drivers registered in the system.' : 'No drivers matching search.'}
+                  </div>
+                ) : (
+                  filteredDrivers.map(d => {
+                    const isAssigning = String(assigningDriverId) === String(d.id) || String(assigningDriverId) === String(d.user_id);
+                    const isDisabled = d.status === 'On Leave' || d.isOverlapping || assigningDriverId !== null;
+
+                    const getStatusClass = (status) => {
+                      switch(status.toLowerCase()) {
+                        case 'available': return 'driver-badge-available';
+                        case 'assigned': return 'driver-badge-assigned';
+                        case 'on leave': return 'driver-badge-leave';
+                        case 'schedule conflict': return 'driver-badge-leave';
+                        default: return 'driver-badge-available';
+                      }
+                    };
+
+                    return (
+                      <div 
+                        key={d.id}
+                        onClick={() => !isDisabled && handleAssignDriver(d)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '12px',
+                          border: isAssigning ? '1px solid var(--primary-brand)' : '1px solid rgba(197, 197, 211, 0.2)',
+                          borderRadius: '8px',
+                          cursor: isDisabled ? 'not-allowed' : 'pointer',
+                          opacity: (d.status === 'On Leave' || d.isOverlapping || (assigningDriverId !== null && !isAssigning)) ? 0.5 : 1,
+                          backgroundColor: isAssigning ? 'rgba(0, 35, 111, 0.04)' : '#ffffff',
+                          transition: 'all 0.2s',
+                          pointerEvents: isDisabled ? 'none' : 'auto'
+                        }}
+                        className="driver-row-hover"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(0, 35, 111, 0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 600, color: 'var(--primary-brand)' }}>
+                            {d.avatar}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-dark)' }}>{d.name}</span>
+                            <span style={{ fontSize: '11px', color: 'var(--icon-color)' }}>ID: {d.number} • {d.license}</span>
+                            {d.isOverlapping && d.conflictInfo && (
+                              <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: 600, marginTop: '2px' }}>
+                                ⚠️ Schedule conflict: {d.conflictInfo}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {isAssigning ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--primary-brand)' }}>
+                            <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} />
+                            Assigning...
+                          </span>
+                        ) : (
+                          <span 
+                            className={`driver-status-badge ${getStatusClass(d.status)}`}
+                            style={d.isOverlapping ? { backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' } : {}}
+                          >
+                            {d.status}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
             
@@ -1666,11 +2056,11 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
             </div>
 
             <div className="modal-footer">
-              <Button type="button" variant="secondary" onClick={() => setIsStopModalOpen(false)}>
+              <Button type="button" variant="secondary" onClick={() => setIsStopModalOpen(false)} disabled={isAddingStop}>
                 Cancel
               </Button>
-              <Button type="submit">
-                Save & Link Pinned Stop
+              <Button type="submit" isLoading={isAddingStop} disabled={isAddingStop}>
+                {isAddingStop ? 'Saving Stop...' : 'Save & Link Pinned Stop'}
               </Button>
             </div>
           </form>
@@ -1891,22 +2281,6 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                   </div>
                 </div>
 
-                {/* Fallback Manual Name Entry */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                  <label style={{ fontSize: '11px', color: 'var(--icon-color)' }}>Or enter a custom student name if not in directory:</label>
-                  <Input 
-                    type="text" 
-                    placeholder="e.g. Custom Student Name"
-                    value={newStudentName}
-                    onChange={(e) => {
-                      setNewStudentName(e.target.value);
-                      if (selectedStudentObj && selectedStudentObj.name !== e.target.value) {
-                        setSelectedStudentObj(null);
-                      }
-                    }}
-                  />
-                </div>
-
               </div>
             </div>
 
@@ -1914,6 +2288,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
               <Button 
                 type="button" 
                 variant="secondary" 
+                disabled={manageStopsMutation.isPending}
                 onClick={() => {
                   setIsStudentModalOpen(false);
                   setSelectedStudentObj(null);
@@ -1922,8 +2297,12 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={!selectedStudentStopId || (!selectedStudentObj && !newStudentName.trim())}>
-                Register Student
+              <Button 
+                type="submit" 
+                disabled={!selectedStudentStopId || !selectedStudentObj || manageStopsMutation.isPending}
+                isLoading={manageStopsMutation.isPending}
+              >
+                {manageStopsMutation.isPending ? 'Registering...' : 'Register Student'}
               </Button>
             </div>
           </form>
@@ -1974,6 +2353,64 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                 style={{ backgroundColor: '#dc2626', borderColor: '#dc2626' }}
               >
                 Remove Stop
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- Remove Student Confirmation Modal --- */}
+      {isRemoveStudentModalOpen && studentToRemoveData && (
+        <div className="modal-overlay">
+          <div className="modal-card" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <UserX size={18} style={{ color: '#ef4444' }} />
+                Remove Student from Stop
+              </h2>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={() => {
+                  if (!isRemovingStudent) {
+                    setIsRemoveStudentModalOpen(false);
+                    setStudentToRemoveData(null);
+                  }
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ padding: '20px', textAlign: 'left' }}>
+              <p style={{ fontSize: '14px', color: 'var(--text-dark)', margin: 0, lineHeight: 1.5 }}>
+                Are you sure you want to remove <strong>{studentToRemoveData.student?.name}</strong> from this pick-up stop?
+              </p>
+              <p style={{ fontSize: '12px', color: '#64748b', margin: '8px 0 0 0', fontWeight: 500 }}>
+                This will unassign the student from the stop and update the live route manifest for the driver.
+              </p>
+            </div>
+
+            <div className="modal-footer" style={{ backgroundColor: '#fafbfc' }}>
+              <Button 
+                type="button" 
+                variant="secondary" 
+                disabled={isRemovingStudent}
+                onClick={() => {
+                  setIsRemoveStudentModalOpen(false);
+                  setStudentToRemoveData(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="button"
+                disabled={isRemovingStudent}
+                isLoading={isRemovingStudent}
+                onClick={handleConfirmRemoveStudent}
+                style={{ backgroundColor: '#ef4444', borderColor: '#ef4444' }}
+              >
+                {isRemovingStudent ? 'Removing...' : 'Confirm Remove'}
               </Button>
             </div>
           </div>
