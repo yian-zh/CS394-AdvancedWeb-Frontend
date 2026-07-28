@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboardService';
 
-export const useStudents = () => {
+export const useStudents = ({ page = 1, perPage = 10 } = {}) => {
   return useQuery({
-    queryKey: ['students'],
-    queryFn: dashboardService.getStudents,
+    queryKey: ['students', { page, perPage }],
+    queryFn: () => dashboardService.getStudents({ page, perPage }),
   });
 };
 

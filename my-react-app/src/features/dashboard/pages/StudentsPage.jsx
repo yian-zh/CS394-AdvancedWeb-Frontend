@@ -21,9 +21,15 @@ const BASE_STATS = {
 };
 
 const StudentsPage = ({ user, onSignOut }) => {
-  const { data: rawStudents = [], isLoading, error } = useStudents();
-  const { data: rawUsers = [] } = useUsers();
-  const { data: rawRoutes = [] } = useRoutes();
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  const { data: studentsResponse, isLoading, error } = useStudents({ page: currentPage, perPage: itemsPerPage });
+  const rawStudents = studentsResponse?.data ?? [];
+  const studentsMeta = studentsResponse?.meta ?? {};
+  const { data: usersResponse } = useUsers({ perPage: 1000 });
+  const rawUsers = usersResponse?.data ?? [];
+  const { data: routesResponse } = useRoutes({ perPage: 1000 });
+  const rawRoutes = routesResponse?.data ?? [];
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
@@ -33,10 +39,6 @@ const StudentsPage = ({ user, onSignOut }) => {
   const [gradeFilter, setGradeFilter] = useState('All');
   const [routeFilter, setRouteFilter] = useState('All');
   
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
-
   const students = useMemo(() => {
     return rawStudents.map(s => {
       const primaryGuardian = s.guardians && s.guardians[0];
@@ -181,7 +183,7 @@ const StudentsPage = ({ user, onSignOut }) => {
 
   // Calculate real stats directly from backend API dataset
   const stats = useMemo(() => {
-    const totalCount = rawStudents.length;
+    const totalCount = studentsMeta.total || rawStudents.length;
 
     // Active Enrolled Students
     const enrolledCount = rawStudents.filter(s => 
@@ -218,7 +220,7 @@ const StudentsPage = ({ user, onSignOut }) => {
         status: `${transportCount} Active bus stop assignments` 
       }
     };
-  }, [rawStudents]);
+  }, [rawStudents, studentsMeta]);
 
   // Search & Filter logic
   const filteredStudents = useMemo(() => {
@@ -234,19 +236,6 @@ const StudentsPage = ({ user, onSignOut }) => {
       return matchesSearch && matchesGrade && matchesRoute;
     });
   }, [students, searchQuery, gradeFilter, routeFilter]);
-
-  // Pagination Logic
-  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage) || 1;
-  const paginatedStudents = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredStudents.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredStudents, currentPage]);
-
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
 
   // Modal Openers
   const openAddModal = () => {
@@ -712,8 +701,8 @@ const StudentsPage = ({ user, onSignOut }) => {
                         Error loading students: {error.message || String(error)}
                       </td>
                     </tr>
-                  ) : paginatedStudents.length > 0 ? (
-                    paginatedStudents.map((s) => (
+                  ) : filteredStudents.length > 0 ? (
+                    filteredStudents.map((s) => (
                       <tr key={s.id}>
                         <td style={{ fontWeight: '600', color: 'var(--primary-brand)', fontSize: '13px' }}>
                           {s.id}
@@ -779,7 +768,9 @@ const StudentsPage = ({ user, onSignOut }) => {
             {/* Pagination Controls */}
             <div className="pagination-footer">
               <span className="pagination-info">
-                Showing {filteredStudents.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredStudents.length)} of {filteredStudents.length} students
+                {studentsMeta.total
+                  ? `Showing ${((currentPage - 1) * itemsPerPage) + 1} to ${Math.min(currentPage * itemsPerPage, studentsMeta.total)} of ${studentsMeta.total} students`
+                  : `Showing ${filteredStudents.length} students`}
               </span>
 
               <div className="pagination-controls">
@@ -787,17 +778,17 @@ const StudentsPage = ({ user, onSignOut }) => {
                   type="button" 
                   className="pagination-btn" 
                   disabled={currentPage === 1}
-                  onClick={() => handlePageChange(currentPage - 1)}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 >
                   <ChevronLeft size={16} />
                 </button>
                 
-                {Array.from({ length: totalPages }).map((_, idx) => (
+                {Array.from({ length: studentsMeta.last_page || 1 }).map((_, idx) => (
                   <button 
                     key={idx + 1}
                     type="button" 
                     className={`pagination-btn ${currentPage === idx + 1 ? 'is-active' : ''}`}
-                    onClick={() => handlePageChange(idx + 1)}
+                    onClick={() => setCurrentPage(idx + 1)}
                   >
                     {idx + 1}
                   </button>
@@ -806,8 +797,8 @@ const StudentsPage = ({ user, onSignOut }) => {
                 <button 
                   type="button" 
                   className="pagination-btn" 
-                  disabled={currentPage === totalPages}
-                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === (studentsMeta.last_page || 1)}
+                  onClick={() => setCurrentPage(p => Math.min(studentsMeta.last_page || 1, p + 1))}
                 >
                   <ChevronRight size={16} />
                 </button>

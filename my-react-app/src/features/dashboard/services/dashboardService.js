@@ -50,8 +50,9 @@ export const dashboardService = {
   // ==========================================
   // 👥 User Management
   // ==========================================
-  async getUsers() {
-    const response = await fetch(`${API_URL}/users`, {
+  async getUsers({ page = 1, perPage = 10 } = {}) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    const response = await fetch(`${API_URL}/users?${params}`, {
       method: 'GET',
       headers: getHeaders(),
     });
@@ -95,8 +96,9 @@ export const dashboardService = {
   // ==========================================
   // 🗃️ Student Directory
   // ==========================================
-  async getStudents() {
-    const response = await fetch(`${API_URL}/students`, {
+  async getStudents({ page = 1, perPage = 10 } = {}) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    const response = await fetch(`${API_URL}/students?${params}`, {
       method: 'GET',
       headers: getHeaders(),
     });
@@ -141,8 +143,9 @@ export const dashboardService = {
   // ==========================================
   // 🚌 Fleet Infrastructure (PostgreSQL)
   // ==========================================
-  async getBuses() {
-    const response = await fetch(`${API_URL}/buses`, {
+  async getBuses({ page = 1, perPage = 10 } = {}) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    const response = await fetch(`${API_URL}/buses?${params}`, {
       method: 'GET',
       headers: getHeaders(),
     });
@@ -179,8 +182,9 @@ export const dashboardService = {
   // ==========================================
   // 🔧 Maintenance Operations (MongoDB + Hybrid)
   // ==========================================
-  async getPendingMaintenance() {
-    const response = await fetch(`${API_URL}/maintenance/pending`, {
+  async getPendingMaintenance({ page = 1, perPage = 10 } = {}) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    const response = await fetch(`${API_URL}/maintenance/pending?${params}`, {
       method: 'GET',
       headers: getHeaders(),
     });
@@ -208,8 +212,9 @@ export const dashboardService = {
   // ==========================================
   // 🗺️ Route Logistics & Deployment
   // ==========================================
-  async getRoutes() {
-    const response = await fetch(`${API_URL}/routes`, {
+  async getRoutes({ page = 1, perPage = 10 } = {}) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    const response = await fetch(`${API_URL}/routes?${params}`, {
       method: 'GET',
       headers: getHeaders(),
     });
@@ -272,8 +277,9 @@ export const dashboardService = {
   // ==========================================
   // 💰 Billing & Finance Operations
   // ==========================================
-  async getFeeStructures() {
-    const response = await fetch(`${API_URL}/billing/fee-structures`, {
+  async getFeeStructures({ page = 1, perPage = 10 } = {}) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    const response = await fetch(`${API_URL}/billing/fee-structures?${params}`, {
       method: 'GET',
       headers: getHeaders(),
     });
@@ -307,8 +313,9 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
-  async getInvoices() {
-    const response = await fetch(`${API_URL}/billing/invoices`, {
+  async getInvoices({ page = 1, perPage = 10 } = {}) {
+    const params = new URLSearchParams({ page, per_page: perPage });
+    const response = await fetch(`${API_URL}/billing/invoices?${params}`, {
       method: 'GET',
       headers: getHeaders(),
     });
@@ -317,6 +324,30 @@ export const dashboardService = {
 
   async generateInvoices() {
     const response = await fetch(`${API_URL}/billing/invoices/generate`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  async sendInvoice(id) {
+    const response = await fetch(`${API_URL}/billing/invoices/${id}/send`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  async sendStudentInvoice(studentId) {
+    const response = await fetch(`${API_URL}/billing/students/${studentId}/send-invoice`, {
+      method: 'POST',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
+  async sendAllInvoices() {
+    const response = await fetch(`${API_URL}/billing/invoices/send-all`, {
       method: 'POST',
       headers: getHeaders(),
     });

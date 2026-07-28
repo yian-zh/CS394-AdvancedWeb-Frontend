@@ -13,7 +13,11 @@ import { Edit3 } from 'lucide-react';
 import '../styles/dashboard.css';
 
 const UserManagementPage = ({ user, onSignOut }) => {
-  const { data: rawUsers = [], isLoading, error } = useUsers();
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const { data: usersResponse, isLoading, error } = useUsers({ page: currentPage, perPage: itemsPerPage });
+  const rawUsers = usersResponse?.data ?? [];
+  const paginationMeta = usersResponse?.meta ?? {};
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
@@ -462,17 +466,36 @@ const UserManagementPage = ({ user, onSignOut }) => {
             {/* Table pagination footer */}
             <div className="pagination-footer">
               <span className="pagination-info">
-                Showing 1 to {filteredUsers.length} of {filteredUsers.length} entries
+                {paginationMeta.total
+                  ? `Showing ${((currentPage - 1) * itemsPerPage) + 1} to ${Math.min(currentPage * itemsPerPage, paginationMeta.total)} of ${paginationMeta.total} entries`
+                  : `Showing ${filteredUsers.length} entries`}
               </span>
 
               <div className="pagination-controls">
-                <button type="button" className="pagination-btn" disabled>
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                >
                   <ChevronLeft size={16} />
                 </button>
-                <button type="button" className="pagination-btn is-active">1</button>
-                <button type="button" className="pagination-btn">2</button>
-                <button type="button" className="pagination-btn">3</button>
-                <button type="button" className="pagination-btn" disabled>
+                {Array.from({ length: paginationMeta.last_page || 1 }).map((_, idx) => (
+                  <button
+                    key={idx + 1}
+                    type="button"
+                    className={`pagination-btn ${currentPage === idx + 1 ? 'is-active' : ''}`}
+                    onClick={() => setCurrentPage(idx + 1)}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  disabled={currentPage === (paginationMeta.last_page || 1)}
+                  onClick={() => setCurrentPage(p => Math.min(paginationMeta.last_page || 1, p + 1))}
+                >
                   <ChevronRight size={16} />
                 </button>
               </div>

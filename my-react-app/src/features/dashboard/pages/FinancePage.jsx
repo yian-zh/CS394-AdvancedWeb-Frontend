@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, 
-  GraduationCap, MapPin, DollarSign, Filter, Edit3, AlertCircle, CheckCircle2, UserCheck
+  GraduationCap, MapPin, DollarSign, Filter, Edit3, AlertCircle, CheckCircle2, UserCheck, Send
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useFeeStructures, useCreateFeeStructure, useUpdateFeeStructure, useAssignFeeStructure, useInvoices, useGenerateInvoices, useUpdateInvoiceStatus } from '../hooks/useFinance';
+import { useFeeStructures, useCreateFeeStructure, useUpdateFeeStructure, useAssignFeeStructure, useInvoices, useGenerateInvoices, useUpdateInvoiceStatus, useSendInvoice, useSendAllInvoices, useSendStudentInvoice } from '../hooks/useFinance';
 import { useUsers } from '../hooks/useUsers';
 import { useStudents } from '../hooks/useStudents';
 import '../styles/dashboard.css';
@@ -31,16 +31,29 @@ const INITIAL_LEDGER = [
 ];
 
 const FinancePage = ({ user, onSignOut }) => {
-  const { data: rawFeeStructures = [], isLoading: isFeesLoading } = useFeeStructures();
-  const { data: rawInvoices = [], isLoading: isInvoicesLoading } = useInvoices();
-  const { data: rawUsers = [] } = useUsers();
-  const { data: rawStudents = [] } = useStudents();
+  const [feePage, setFeePage] = useState(1);
+  const [invoicePage, setInvoicePage] = useState(1);
+  const feesPerPage = 10;
+  const invoicesPerPage = 5;
+  const { data: feeResponse, isLoading: isFeesLoading } = useFeeStructures({ page: feePage, perPage: feesPerPage });
+  const rawFeeStructures = feeResponse?.data ?? [];
+  const feeMeta = feeResponse?.meta ?? {};
+  const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage });
+  const rawInvoices = invoiceResponse?.data ?? [];
+  const invoiceMeta = invoiceResponse?.meta ?? {};
+  const { data: usersResponse } = useUsers({ perPage: 1000 });
+  const rawUsers = usersResponse?.data ?? [];
+  const { data: studentsResponse } = useStudents({ perPage: 1000 });
+  const rawStudents = studentsResponse?.data ?? [];
 
   const createFeeMutation = useCreateFeeStructure();
   const updateFeeMutation = useUpdateFeeStructure();
   const assignFeeMutation = useAssignFeeStructure();
   const generateInvoicesMutation = useGenerateInvoices();
   const updateInvoiceStatusMutation = useUpdateInvoiceStatus();
+  const sendInvoiceMutation = useSendInvoice();
+  const sendStudentInvoiceMutation = useSendStudentInvoice();
+  const sendAllInvoicesMutation = useSendAllInvoices();
 
   const handleStatusChange = async (rawId, newStatus) => {
     if (!rawId) return;
@@ -61,8 +74,6 @@ const FinancePage = ({ user, onSignOut }) => {
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
 
   // Modals state
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
@@ -249,13 +260,6 @@ const FinancePage = ({ user, onSignOut }) => {
     });
   }, [ledger, searchQuery, statusFilter]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredLedger.length / itemsPerPage) || 1;
-  const paginatedLedger = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredLedger.slice(start, start + itemsPerPage);
-  }, [filteredLedger, currentPage]);
-
   // Handlers
   const handleCreateFeeSubmit = async (e) => {
     e.preventDefault();
@@ -358,6 +362,51 @@ const FinancePage = ({ user, onSignOut }) => {
     }
   };
 
+  const handleSendInvoice = async (invoiceId) => {
+    try {
+      await sendInvoiceMutation.mutateAsync(invoiceId);
+      setNotification({
+        type: 'success',
+        message: `Invoice #${invoiceId} sent to the guardian successfully!`
+      });
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err.message || 'Failed to send invoice'
+      });
+    }
+  };
+
+  const handleSendStudentInvoice = async (studentId, studentName) => {
+    try {
+      await sendStudentInvoiceMutation.mutateAsync(studentId);
+      setNotification({
+        type: 'success',
+        message: `Invoice for ${studentName} sent to their guardian!`
+      });
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err.message || 'Failed to send student invoice'
+      });
+    }
+  };
+
+  const handleSendAllInvoices = async () => {
+    try {
+      await sendAllInvoicesMutation.mutateAsync();
+      setNotification({
+        type: 'success',
+        message: 'All invoices sent to their respective guardians!'
+      });
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err.message || 'Failed to send all invoices'
+      });
+    }
+  };
+
   const getStatusBadgeStyle = (status) => {
     switch (status.toLowerCase()) {
       case 'paid':
@@ -446,7 +495,7 @@ const FinancePage = ({ user, onSignOut }) => {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setCurrentPage(1);
+                  setInvoicePage(1);
                 }}
               />
             </div>
@@ -534,6 +583,16 @@ const FinancePage = ({ user, onSignOut }) => {
                 </button>
                 <button 
                   type="button" 
+                  className="add-user-btn"
+                  onClick={handleSendAllInvoices}
+                  disabled={sendAllInvoicesMutation.isPending}
+                  style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#2563eb' }}
+                >
+                  <Send size={16} />
+                  {sendAllInvoicesMutation.isPending ? 'Sending All...' : 'Send All'}
+                </button>
+                <button 
+                  type="button" 
                   className="action-btn"
                   onClick={() => setIsAssignModalOpen(true)}
                   style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ffffff' }}
@@ -552,7 +611,7 @@ const FinancePage = ({ user, onSignOut }) => {
                     <th style={{ padding: '14px 20px', fontSize: '11px' }}>Linked Guardian</th>
                     <th style={{ padding: '14px 20px', fontSize: '11px' }}>Assigned Fee Tier</th>
                     <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'right' }}>Monthly Rate</th>
-                    <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'center', width: '90px' }}>Action</th>
+                    <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'center', width: '160px' }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -590,20 +649,45 @@ const FinancePage = ({ user, onSignOut }) => {
                         ${row.base_amount}
                       </td>
                       <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                        <button
-                          type="button"
-                          className="action-btn"
-                          style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          onClick={() => {
-                            setSelectedStudentId(String(row.student_id));
-                            setSelectedFeeId(String(row.fee_structure_id));
-                            setAssignSearchQuery(row.student_name);
-                            setIsAssignModalOpen(true);
-                          }}
-                          title="Change or Edit Fee Structure for this Student"
-                        >
-                          <Edit3 size={12} /> Edit
-                        </button>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleSendStudentInvoice(row.student_id, row.student_name)}
+                            disabled={sendStudentInvoiceMutation.isPending}
+                            title={`Send invoice for ${row.student_name} to guardian`}
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              backgroundColor: '#2563eb',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: sendStudentInvoiceMutation.isPending ? 'not-allowed' : 'pointer',
+                              opacity: sendStudentInvoiceMutation.isPending ? 0.6 : 1,
+                            }}
+                          >
+                            <Send size={12} />
+                            Send
+                          </button>
+                          <button
+                            type="button"
+                            className="action-btn"
+                            style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            onClick={() => {
+                              setSelectedStudentId(String(row.student_id));
+                              setSelectedFeeId(String(row.fee_structure_id));
+                              setAssignSearchQuery(row.student_name);
+                              setIsAssignModalOpen(true);
+                            }}
+                            title="Change or Edit Fee Structure for this Student"
+                          >
+                            <Edit3 size={11} /> Edit
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -693,7 +777,7 @@ const FinancePage = ({ user, onSignOut }) => {
                     className="select-input"
                     style={{ padding: '6px 24px 6px 10px', fontSize: '12px', height: '32px', width: '120px' }}
                     value={statusFilter}
-                    onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                    onChange={(e) => { setStatusFilter(e.target.value); setInvoicePage(1); }}
                   >
                     <option value="All">All Statuses</option>
                     <option value="Paid">Paid</option>
@@ -727,12 +811,12 @@ const FinancePage = ({ user, onSignOut }) => {
                   <tbody>
                     {isInvoicesLoading ? (
                       <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--primary-brand)' }}>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--primary-brand)' }}>
                           Loading payments ledger...
                         </td>
                       </tr>
-                    ) : paginatedLedger.length > 0 ? (
-                      paginatedLedger.map((row, idx) => (
+                    ) : filteredLedger.length > 0 ? (
+                      filteredLedger.map((row, idx) => (
                         <tr key={idx}>
                           <td style={{ padding: '14px 20px', fontWeight: '600', color: 'var(--primary-brand)', fontSize: '13px' }}>
                             {row.invoice_id}
@@ -773,7 +857,7 @@ const FinancePage = ({ user, onSignOut }) => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--icon-color)' }}>
+                        <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--icon-color)' }}>
                           No invoice records found.
                         </td>
                       </tr>
@@ -785,24 +869,26 @@ const FinancePage = ({ user, onSignOut }) => {
               {/* Pagination controls */}
               <div className="pagination-footer" style={{ padding: '12px 20px' }}>
                 <span className="pagination-info" style={{ fontSize: '12px' }}>
-                  Showing {filteredLedger.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, filteredLedger.length)} of {filteredLedger.length} entries
+                  {invoiceMeta.total
+                    ? `Showing ${((invoicePage - 1) * invoicesPerPage) + 1} to ${Math.min(invoicePage * invoicesPerPage, invoiceMeta.total)} of ${invoiceMeta.total} entries`
+                    : `Showing ${filteredLedger.length} entries`}
                 </span>
 
                 <div className="pagination-controls">
                   <button 
                     type="button" 
                     className="pagination-btn"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={invoicePage === 1}
+                    onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
                   >
                     <ChevronLeft size={14} />
                   </button>
-                  {Array.from({ length: totalPages }).map((_, idx) => (
+                  {Array.from({ length: invoiceMeta.last_page || 1 }).map((_, idx) => (
                     <button 
                       key={idx + 1}
                       type="button"
-                      className={`pagination-btn ${currentPage === idx + 1 ? 'is-active' : ''}`}
-                      onClick={() => setCurrentPage(idx + 1)}
+                      className={`pagination-btn ${invoicePage === idx + 1 ? 'is-active' : ''}`}
+                      onClick={() => setInvoicePage(idx + 1)}
                     >
                       {idx + 1}
                     </button>
@@ -810,8 +896,8 @@ const FinancePage = ({ user, onSignOut }) => {
                   <button 
                     type="button" 
                     className="pagination-btn"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={invoicePage === (invoiceMeta.last_page || 1)}
+                    onClick={() => setInvoicePage(p => Math.min(invoiceMeta.last_page || 1, p + 1))}
                   >
                     <ChevronRight size={14} />
                   </button>

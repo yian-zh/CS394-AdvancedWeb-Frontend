@@ -60,9 +60,15 @@ function isTimeOverlapping(window1, window2) {
 }
 
 const RouteLogisticsPage = ({ user, onSignOut }) => {
-  const { data: rawRoutes = [], isLoading, error } = useRoutes();
-  const { data: rawBuses = [] } = useBuses();
-  const { data: rawUsers = [] } = useUsers();
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12;
+  const { data: routesResponse, isLoading, error } = useRoutes({ page: currentPage, perPage: itemsPerPage });
+  const rawRoutes = routesResponse?.data ?? [];
+  const routesMeta = routesResponse?.meta ?? {};
+  const { data: busesResponse } = useBuses({ perPage: 1000 });
+  const rawBuses = busesResponse?.data ?? [];
+  const { data: usersResponse } = useUsers({ perPage: 1000 });
+  const rawUsers = usersResponse?.data ?? [];
   const createRouteMutation = useCreateRoute();
   const updateRouteMutation = useUpdateRoute();
   const deleteRouteMutation = useDeleteRoute();
@@ -655,16 +661,46 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
           {/* Pagination Footer */}
           <div className="pagination-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '32px', borderTop: '1px solid rgba(197, 197, 211, 0.2)', paddingTop: '20px' }}>
             <span style={{ fontSize: '13px', color: 'var(--icon-color)' }}>
-              Showing {filteredRoutes.length} of {routes.length} active routes
+              {routesMeta.total
+                ? `Showing ${((currentPage - 1) * itemsPerPage) + 1} to ${Math.min(currentPage * itemsPerPage, routesMeta.total)} of ${routesMeta.total} active routes`
+                : `Showing ${filteredRoutes.length} of ${routes.length} active routes`}
             </span>
             <div style={{ display: 'flex', gap: '6px' }}>
-              <button type="button" className="pagination-btn" style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="pagination-btn"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#64748b', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center' }}
+              >
                 <ChevronLeft size={14} />
               </button>
-              <button type="button" className="pagination-btn active" style={{ padding: '6px 12px', border: '1px solid var(--primary-brand)', borderRadius: '6px', backgroundColor: 'var(--primary-brand)', color: '#ffffff', cursor: 'pointer', fontWeight: 600 }}>1</button>
-              <button type="button" className="pagination-btn" style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}>2</button>
-              <button type="button" className="pagination-btn" style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer' }}>3</button>
-              <button type="button" className="pagination-btn" style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              {Array.from({ length: routesMeta.last_page || 1 }).map((_, idx) => (
+                <button
+                  key={idx + 1}
+                  type="button"
+                  className={`pagination-btn ${currentPage === idx + 1 ? 'active' : ''}`}
+                  onClick={() => setCurrentPage(idx + 1)}
+                  style={{
+                    padding: '6px 12px',
+                    border: currentPage === idx + 1 ? '1px solid var(--primary-brand)' : '1px solid #cbd5e1',
+                    borderRadius: '6px',
+                    backgroundColor: currentPage === idx + 1 ? 'var(--primary-brand)' : '#ffffff',
+                    color: currentPage === idx + 1 ? '#ffffff' : '#64748b',
+                    cursor: 'pointer',
+                    fontWeight: currentPage === idx + 1 ? 600 : 400
+                  }}
+                >
+                  {idx + 1}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="pagination-btn"
+                disabled={currentPage === (routesMeta.last_page || 1)}
+                onClick={() => setCurrentPage(p => Math.min(routesMeta.last_page || 1, p + 1))}
+                style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: currentPage === (routesMeta.last_page || 1) ? '#cbd5e1' : '#64748b', cursor: currentPage === (routesMeta.last_page || 1) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center' }}
+              >
                 <ChevronRight size={14} />
               </button>
             </div>

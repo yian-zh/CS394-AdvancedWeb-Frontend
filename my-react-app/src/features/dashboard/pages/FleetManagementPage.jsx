@@ -12,8 +12,15 @@ import { useBuses, usePendingMaintenance, useCreateMaintenanceRequest, useResolv
 import '../styles/dashboard.css';
 
 const FleetManagementPage = ({ user, onSignOut }) => {
-  const { data: rawBuses = [], isLoading: isBusesLoading, error: busesError } = useBuses();
-  const { data: maintenanceData = [], isLoading: isMaintLoading, error: maintError } = usePendingMaintenance();
+  const [busPage, setBusPage] = useState(1);
+  const [maintPage, setMaintPage] = useState(1);
+  const itemsPerPage = 10;
+  const { data: busesResponse, isLoading: isBusesLoading, error: busesError } = useBuses({ page: busPage, perPage: itemsPerPage });
+  const rawBuses = busesResponse?.data ?? [];
+  const busesMeta = busesResponse?.meta ?? {};
+  const { data: maintResponse, isLoading: isMaintLoading, error: maintError } = usePendingMaintenance({ page: maintPage, perPage: itemsPerPage });
+  const maintenanceData = maintResponse?.data ?? [];
+  const maintMeta = maintResponse?.meta ?? {};
   
   const createMaintenanceMutation = useCreateMaintenanceRequest();
   const resolveMaintenanceMutation = useResolveMaintenanceRequest();
@@ -422,7 +429,7 @@ const FleetManagementPage = ({ user, onSignOut }) => {
           <div className="bento-grid">
             <div className="bento-card">
               <p className="bento-card-title">Total Buses</p>
-              <p className="bento-card-value">142</p>
+              <p className="bento-card-value">{busesMeta.total || rawBuses.length}</p>
               <p className="bento-card-subtext">Active fleet vehicles</p>
             </div>
             <div className="bento-card">
@@ -590,15 +597,36 @@ const FleetManagementPage = ({ user, onSignOut }) => {
 
             <div className="pagination-footer">
               <span className="pagination-info">
-                Showing {filteredRepairs.length} of {repairs.length} entries
+                {maintMeta.total
+                  ? `Showing ${((maintPage - 1) * itemsPerPage) + 1} to ${Math.min(maintPage * itemsPerPage, maintMeta.total)} of ${maintMeta.total} entries`
+                  : `Showing ${filteredRepairs.length} of ${repairs.length} entries`}
               </span>
 
               <div className="pagination-controls">
-                <button type="button" className="pagination-btn" disabled>
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  disabled={maintPage === 1}
+                  onClick={() => setMaintPage(p => Math.max(1, p - 1))}
+                >
                   <ChevronLeft size={16} />
                 </button>
-                <button type="button" className="pagination-btn is-active">1</button>
-                <button type="button" className="pagination-btn" disabled>
+                {Array.from({ length: maintMeta.last_page || 1 }).map((_, idx) => (
+                  <button
+                    key={idx + 1}
+                    type="button"
+                    className={`pagination-btn ${maintPage === idx + 1 ? 'is-active' : ''}`}
+                    onClick={() => setMaintPage(idx + 1)}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="pagination-btn"
+                  disabled={maintPage === (maintMeta.last_page || 1)}
+                  onClick={() => setMaintPage(p => Math.min(maintMeta.last_page || 1, p + 1))}
+                >
                   <ChevronRight size={16} />
                 </button>
               </div>
