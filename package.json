@@ -4,6 +4,6 @@
   "version": "1.0.0",
   "scripts": {
     "build": "cd my-react-app && npm install && npm run build",
-    "start": "cd my-react-app && npm run preview -- --host 0.0.0.0 --port ${PORT:-8080}"
+    "start": "cd my-react-app && npx serve -s dist -l ${PORT:-8080}"
   }
 }

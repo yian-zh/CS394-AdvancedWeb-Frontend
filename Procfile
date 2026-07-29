@@ -1,1 +1,1 @@
-web: cd my-react-app && npm run preview -- --host 0.0.0.0 --port ${PORT:-8080}
+web: cd my-react-app && npx serve -s dist -l ${PORT:-8080}
