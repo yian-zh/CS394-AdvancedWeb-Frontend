@@ -135,13 +135,13 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const navigate = useNavigate();
   const currentRoute = ROUTE_DETAILS[routeId] || ROUTE_DETAILS['route-1'];
 
-  const { data: routesResponse, isLoading: isQueryLoading, error: queryError } = useRoutes({ perPage: 1000 });
+  const { data: routesResponse, isLoading: isQueryLoading, error: queryError } = useRoutes({ perPage: 200 });
   const rawRoutes = routesResponse?.data ?? [];
-  const { data: studentsResponse, isLoading: isStudentsLoading } = useStudents({ perPage: 1000 });
+  const { data: studentsResponse, isLoading: isStudentsLoading } = useStudents({ perPage: 200 });
   const rawStudents = studentsResponse?.data ?? [];
-  const { data: busesResponse } = useBuses({ perPage: 1000 });
+  const { data: busesResponse } = useBuses({ perPage: 200 });
   const rawBuses = busesResponse?.data ?? [];
-  const { data: usersResponse } = useUsers({ perPage: 1000 });
+  const { data: usersResponse } = useUsers({ perPage: 200 });
   const rawUsers = usersResponse?.data ?? [];
   const createStudentMutation = useCreateStudent();
   const manageStopsMutation = useManageStops();

@@ -2,12 +2,14 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, Wrench, Calendar, AlertTriangle, MapPin,
+  SlidersHorizontal, Download, X, Wrench, Calendar, AlertTriangle, MapPin,
   GraduationCap, FileText, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import Pagination from '../../../components/ui/Pagination';
+import { useDebounce } from '../../../hooks/useDebounce';
 import { useBuses, usePendingMaintenance, useCreateMaintenanceRequest, useResolveMaintenanceRequest, useCreateBus } from '../hooks/useFleet';
 import '../styles/dashboard.css';
 
@@ -30,6 +32,7 @@ const FleetManagementPage = ({ user, onSignOut }) => {
   const error = busesError ? (busesError.message || String(busesError)) : (maintError ? (maintError.message || String(maintError)) : null);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -135,8 +138,8 @@ const FleetManagementPage = ({ user, onSignOut }) => {
 
   // Search Logic (applies to Maintenance Queue)
   const filteredRepairs = repairs.filter((r) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
+    if (!debouncedSearch.trim()) return true;
+    const query = debouncedSearch.toLowerCase();
     return (
       r.id.toLowerCase().includes(query) ||
       r.issue.toLowerCase().includes(query) ||
@@ -595,42 +598,14 @@ const FleetManagementPage = ({ user, onSignOut }) => {
               </table>
             </div>
 
-            <div className="pagination-footer">
-              <span className="pagination-info">
-                {maintMeta.total
-                  ? `Showing ${((maintPage - 1) * itemsPerPage) + 1} to ${Math.min(maintPage * itemsPerPage, maintMeta.total)} of ${maintMeta.total} entries`
-                  : `Showing ${filteredRepairs.length} of ${repairs.length} entries`}
-              </span>
-
-              <div className="pagination-controls">
-                <button
-                  type="button"
-                  className="pagination-btn"
-                  disabled={maintPage === 1}
-                  onClick={() => setMaintPage(p => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                {Array.from({ length: maintMeta.last_page || 1 }).map((_, idx) => (
-                  <button
-                    key={idx + 1}
-                    type="button"
-                    className={`pagination-btn ${maintPage === idx + 1 ? 'is-active' : ''}`}
-                    onClick={() => setMaintPage(idx + 1)}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="pagination-btn"
-                  disabled={maintPage === (maintMeta.last_page || 1)}
-                  onClick={() => setMaintPage(p => Math.min(maintMeta.last_page || 1, p + 1))}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              currentPage={maintPage}
+              lastPage={maintMeta.last_page || 1}
+              total={maintMeta.total || 0}
+              perPage={itemsPerPage}
+              onChange={setMaintPage}
+              label="maintenance entries"
+            />
           </Card>
         </div>
       </main>

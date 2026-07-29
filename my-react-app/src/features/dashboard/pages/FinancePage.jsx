@@ -1,15 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, 
-  GraduationCap, MapPin, DollarSign, Filter, Edit3, AlertCircle, CheckCircle2, UserCheck
+  SlidersHorizontal, Download, X, 
+  GraduationCap, MapPin, DollarSign, Edit3, AlertCircle, CheckCircle2, UserCheck
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import Pagination from '../../../components/ui/Pagination';
+import AsyncSelect from '../../../components/ui/AsyncSelect';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { dashboardService } from '../services/dashboardService';
 import { useFeeStructures, useCreateFeeStructure, useUpdateFeeStructure, useAssignFeeStructure, useInvoices, useGenerateInvoices, useUpdateInvoiceStatus, useRecordPayment } from '../hooks/useFinance';
-import { useUsers } from '../hooks/useUsers';
 import { useStudents } from '../hooks/useStudents';
 import '../styles/dashboard.css';
 
@@ -27,10 +30,11 @@ const FinancePage = ({ user, onSignOut }) => {
   const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage });
   const rawInvoices = invoiceResponse?.data ?? [];
   const invoiceMeta = invoiceResponse?.meta ?? {};
-  const { data: usersResponse } = useUsers({ perPage: 1000 });
-  const rawUsers = usersResponse?.data ?? [];
-  const { data: studentsResponse } = useStudents({ perPage: 1000 });
+  const [studentFeePage, setStudentFeePage] = useState(1);
+  const studentsPerPage = 10;
+  const { data: studentsResponse } = useStudents({ page: studentFeePage, perPage: studentsPerPage });
   const rawStudents = studentsResponse?.data ?? [];
+  const studentsMeta = studentsResponse?.meta ?? {};
 
   const createFeeMutation = useCreateFeeStructure();
   const updateFeeMutation = useUpdateFeeStructure();
@@ -38,6 +42,16 @@ const FinancePage = ({ user, onSignOut }) => {
   const generateInvoicesMutation = useGenerateInvoices();
   const updateInvoiceStatusMutation = useUpdateInvoiceStatus();
   const recordPaymentMutation = useRecordPayment();
+
+  const fetchStudents = useCallback(async (search) => {
+    const data = await dashboardService.getStudents({ search, perPage: 20 });
+    return (data?.data ?? []).map(s => ({
+      id: s.student_id || s.id,
+      label: `${s.first_name || ''} ${s.last_name || ''}`.trim() || `Student #${s.student_id || s.id}`,
+      sub: s.grade_level || '',
+      student_id: s.student_id || s.id,
+    }));
+  }, []);
 
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState(null);
@@ -64,6 +78,7 @@ const FinancePage = ({ user, onSignOut }) => {
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter, setStatusFilter] = useState('All');
 
   // Modals state
@@ -100,27 +115,9 @@ const FinancePage = ({ user, onSignOut }) => {
   };
 
   // Fee Assignment Form State
-  const [assignSearchQuery, setAssignSearchQuery] = useState('');
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedFeeId, setSelectedFeeId] = useState('');
   const [assignFormErrors, setAssignFormErrors] = useState({});
-
-  // Filtered Students for Assign Modal
-  const filteredAssignStudents = useMemo(() => {
-    if (!assignSearchQuery.trim()) return rawStudents;
-    const q = assignSearchQuery.toLowerCase();
-    return rawStudents.filter((s) => {
-      const gUser = s.guardians && s.guardians[0] && s.guardians[0].user;
-      const guardianStr = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || '');
-      const studentName = s.first_name ? `${s.first_name} ${s.last_name}` : (s.name || '');
-      const gradeStr = s.grade_level || '';
-      return (
-        studentName.toLowerCase().includes(q) ||
-        guardianStr.toLowerCase().includes(q) ||
-        gradeStr.toLowerCase().includes(q)
-      );
-    });
-  }, [rawStudents, assignSearchQuery]);
 
   // Computed Fee Structures (API data or Fallback)
   const feeStructures = useMemo(() => {
@@ -164,25 +161,6 @@ const FinancePage = ({ user, onSignOut }) => {
     });
   }, [rawStudents, feeStructures]);
 
-  // Computed Registered Guardians
-  const registeredGuardians = useMemo(() => {
-    const list = [];
-    const nameSet = new Set();
-
-    rawUsers.forEach((u) => {
-      const roleStr = (u.role || '').toLowerCase();
-      if (!roleStr || roleStr === 'guardian' || roleStr === 'parent') {
-        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
-        if (fullName && !nameSet.has(fullName)) {
-          nameSet.add(fullName);
-          list.push({ id: u.user_id || u.id, name: fullName, email: u.email });
-        }
-      }
-    });
-
-    return list;
-  }, [rawUsers]);
-
   // Computed Invoices / Payments Ledger
   const ledger = useMemo(() => {
     if (rawInvoices && rawInvoices.length > 0) {
@@ -218,7 +196,7 @@ const FinancePage = ({ user, onSignOut }) => {
           invoice_id: `#INV-${rawId}`,
           payer: payerName,
           fee_tier: feeTier,
-          date: inv.invoice_date || 'Oct 24, 2023',
+          date: inv.invoice_date ? String(inv.invoice_date).split('T')[0] : 'Oct 24, 2023',
           amount: formattedAmount,
           status: inv.status || 'Paid'
         };
@@ -229,15 +207,16 @@ const FinancePage = ({ user, onSignOut }) => {
 
   // Filtered Ledger
   const filteredLedger = useMemo(() => {
-      return ledger.filter((item) => {
-      const matchesSearch = 
-        item.invoice_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.payer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.fee_tier.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = debouncedSearch.toLowerCase();
+    return ledger.filter((item) => {
+      const matchesSearch = !q ||
+        item.invoice_id.toLowerCase().includes(q) ||
+        item.payer.toLowerCase().includes(q) ||
+        item.fee_tier.toLowerCase().includes(q);
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [ledger, searchQuery, statusFilter]);
+  }, [ledger, debouncedSearch, statusFilter]);
 
   // Handlers
   const handleCreateFeeSubmit = async (e) => {
@@ -299,16 +278,15 @@ const FinancePage = ({ user, onSignOut }) => {
     }
 
     try {
-      const selectedStudent = rawStudents.find(s => String(s.student_id || s.id) === String(selectedStudentId));
-      const studentName = selectedStudent ? (selectedStudent.first_name ? `${selectedStudent.first_name} ${selectedStudent.last_name}` : selectedStudent.name) : 'Student';
-      const gUser = selectedStudent && selectedStudent.guardians && selectedStudent.guardians[0] && selectedStudent.guardians[0].user;
-      const guardianStr = gUser ? `${gUser.first_name} ${gUser.last_name}` : (selectedStudent ? selectedStudent.guardianName : '');
+      const selectedStudentIdVal = typeof selectedStudentId === 'object' ? selectedStudentId.student_id || selectedStudentId.id : selectedStudentId;
+      const studentName = typeof selectedStudentId === 'object' ? selectedStudentId.label : 'Student';
+      const guardianStr = '';
 
       const selectedFee = feeStructures.find(f => String(f.fee_structure_id) === String(selectedFeeId));
       const feeNameStr = selectedFee ? `${selectedFee.fee_name} ($${selectedFee.base_amount})` : 'Fee Structure';
 
       await assignFeeMutation.mutateAsync({
-        student_id: parseInt(selectedStudentId, 10),
+        student_id: parseInt(selectedStudentIdVal, 10),
         fee_structure_id: parseInt(selectedFeeId, 10)
       });
 
@@ -319,7 +297,6 @@ const FinancePage = ({ user, onSignOut }) => {
       setIsAssignModalOpen(false);
       setSelectedStudentId('');
       setSelectedFeeId('');
-      setAssignSearchQuery('');
       setAssignFormErrors({});
     } catch (err) {
       setAssignFormErrors({ submit: err.message || 'Failed to assign fee structure' });
@@ -537,7 +514,7 @@ const FinancePage = ({ user, onSignOut }) => {
 
           {/* CARD: Assigned Student Fees with Generate Invoices Button */}
           <Card style={{ padding: '0', overflow: 'hidden', marginBottom: '24px' }}>
-            <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(197, 197, 211, 0.3)', backgroundColor: '#fafafa', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #cbd5e1', backgroundColor: '#fafafa', flexWrap: 'wrap', gap: '12px' }}>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-brand)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <UserCheck size={18} />
@@ -629,9 +606,8 @@ const FinancePage = ({ user, onSignOut }) => {
                             className="action-btn"
                             style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             onClick={() => {
-                              setSelectedStudentId(String(row.student_id));
+                              setSelectedStudentId({ id: row.student_id, label: row.student_name, sub: row.grade });
                               setSelectedFeeId(String(row.fee_structure_id));
-                              setAssignSearchQuery(row.student_name);
                               setIsAssignModalOpen(true);
                             }}
                             title="Change or Edit Fee Structure for this Student"
@@ -645,14 +621,22 @@ const FinancePage = ({ user, onSignOut }) => {
                 </tbody>
               </table>
             </div>
+            <Pagination
+              currentPage={studentFeePage}
+              lastPage={studentsMeta.last_page || 1}
+              total={studentsMeta.total || 0}
+              perPage={studentsPerPage}
+              onChange={setStudentFeePage}
+              label="students"
+            />
           </Card>
 
           {/* Financial Dashboard Grid (2 Columns matching mockup) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.8fr', gap: '24px', alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '24px', alignItems: 'start' }}>
             
             {/* LEFT CARD: Fee Structure */}
             <Card style={{ padding: '0', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(197, 197, 211, 0.3)' }}>
+              <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-brand)', margin: 0 }}>Fee Structure</h3>
                 <button 
                   type="button" 
@@ -669,9 +653,9 @@ const FinancePage = ({ user, onSignOut }) => {
                 <table className="directory-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
-                      <th style={{ padding: '14px 20px', fontSize: '11px' }}>Service Type</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'right' }}>Rate</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'center', width: '50px' }}>Edit</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px' }}>Service Type</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', textAlign: 'right' }}>Rate</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', textAlign: 'center', width: '50px' }}>Edit</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -683,8 +667,8 @@ const FinancePage = ({ user, onSignOut }) => {
                       </tr>
                     ) : feeStructures.map((fee) => (
                       <tr key={fee.fee_structure_id}>
-                        <td style={{ padding: '16px 20px', fontWeight: '500' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <td style={{ padding: '14px 16px', fontWeight: '500' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span 
                               style={{ 
                                 width: '8px', 
@@ -697,10 +681,10 @@ const FinancePage = ({ user, onSignOut }) => {
                             <span style={{ fontSize: '13px', color: '#1e293b' }}>{fee.fee_name}</span>
                           </div>
                         </td>
-                        <td style={{ padding: '16px 20px', textAlign: 'right', fontWeight: '700', fontSize: '13px', color: '#0f172a' }}>
+                        <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: '700', fontSize: '13px', color: '#0f172a' }}>
                           ${fee.base_amount}
                         </td>
-                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
+                        <td style={{ padding: '14px 16px', textAlign: 'center' }}>
                           <button
                             type="button"
                             className="action-btn"
@@ -720,7 +704,7 @@ const FinancePage = ({ user, onSignOut }) => {
 
             {/* RIGHT CARD: Recent Payments Ledger */}
             <Card style={{ padding: '0', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(197, 197, 211, 0.3)' }}>
+              <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-brand)', margin: 0 }}>Recent Payments Ledger</h3>
                 
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -749,16 +733,16 @@ const FinancePage = ({ user, onSignOut }) => {
               </div>
 
               <div style={{ overflowX: 'auto' }}>
-                <table className="directory-table" style={{ width: '100%' }}>
+                <table className="directory-table" style={{ width: '100%', minWidth: '650px' }}>
                   <thead>
                     <tr>
-                      <th style={{ padding: '14px 20px', fontSize: '11px' }}>Invoice ID</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px' }}>Payer</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px' }}>Fee Tier</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px' }}>Date</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px' }}>Amount</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'center' }}>Status</th>
-                      <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'center' }}>Actions</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Invoice ID</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Payer</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Fee Tier</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Date</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Amount</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>Status</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -771,22 +755,45 @@ const FinancePage = ({ user, onSignOut }) => {
                     ) : filteredLedger.length > 0 ? (
                       filteredLedger.map((row, idx) => (
                         <tr key={idx}>
-                          <td style={{ padding: '14px 20px', fontWeight: '600', color: 'var(--primary-brand)', fontSize: '13px' }}>
+                          <td style={{ padding: '14px 16px', fontWeight: '600', color: 'var(--primary-brand)', fontSize: '13px', whiteSpace: 'nowrap' }}>
                             {row.invoice_id}
                           </td>
-                          <td style={{ padding: '14px 20px', fontWeight: '500', fontSize: '13px', color: '#334155' }}>
+                          <td style={{ padding: '14px 16px', fontWeight: '500', fontSize: '13px', color: '#334155', whiteSpace: 'nowrap' }}>
                             {row.payer}
                           </td>
-                          <td style={{ padding: '14px 20px', fontSize: '13px', color: '#1e293b' }}>
-                            {row.fee_tier || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>—</span>}
+                          <td style={{ padding: '14px 16px', fontSize: '12px', color: '#1e293b', whiteSpace: 'nowrap' }}>
+                            {row.fee_tier ? (
+                              <span 
+                                style={{
+                                  display: 'inline-block',
+                                  maxWidth: '180px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  verticalAlign: 'middle',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  backgroundColor: '#f1f5f9',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  color: '#334155',
+                                  border: '1px solid #e2e8f0'
+                                }} 
+                                title={row.fee_tier}
+                              >
+                                {row.fee_tier}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>—</span>
+                            )}
                           </td>
-                          <td style={{ padding: '14px 20px', fontSize: '13px', color: '#64748b' }}>
+                          <td style={{ padding: '14px 16px', fontSize: '13px', color: '#64748b', whiteSpace: 'nowrap' }}>
                             {row.date}
                           </td>
-                          <td style={{ padding: '14px 20px', fontWeight: '700', fontSize: '13px', color: '#0f172a' }}>
+                          <td style={{ padding: '14px 16px', fontWeight: '700', fontSize: '13px', color: '#0f172a', whiteSpace: 'nowrap' }}>
                             {row.amount}
                           </td>
-                          <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                          <td style={{ padding: '14px 16px', textAlign: 'center', whiteSpace: 'nowrap' }}>
                             <select
                               value={row.status}
                               onChange={(e) => handleStatusChange(row.raw_id, e.target.value)}
@@ -845,43 +852,14 @@ const FinancePage = ({ user, onSignOut }) => {
                 </table>
               </div>
 
-              {/* Pagination controls */}
-              <div className="pagination-footer" style={{ padding: '12px 20px' }}>
-                <span className="pagination-info" style={{ fontSize: '12px' }}>
-                  {invoiceMeta.total
-                    ? `Showing ${((invoicePage - 1) * invoicesPerPage) + 1} to ${Math.min(invoicePage * invoicesPerPage, invoiceMeta.total)} of ${invoiceMeta.total} entries`
-                    : `Showing ${filteredLedger.length} entries`}
-                </span>
-
-                <div className="pagination-controls">
-                  <button 
-                    type="button" 
-                    className="pagination-btn"
-                    disabled={invoicePage === 1}
-                    onClick={() => setInvoicePage(p => Math.max(1, p - 1))}
-                  >
-                    <ChevronLeft size={14} />
-                  </button>
-                  {Array.from({ length: invoiceMeta.last_page || 1 }).map((_, idx) => (
-                    <button 
-                      key={idx + 1}
-                      type="button"
-                      className={`pagination-btn ${invoicePage === idx + 1 ? 'is-active' : ''}`}
-                      onClick={() => setInvoicePage(idx + 1)}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))}
-                  <button 
-                    type="button" 
-                    className="pagination-btn"
-                    disabled={invoicePage === (invoiceMeta.last_page || 1)}
-                    onClick={() => setInvoicePage(p => Math.min(invoiceMeta.last_page || 1, p + 1))}
-                  >
-                    <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
+              <Pagination
+                currentPage={invoicePage}
+                lastPage={invoiceMeta.last_page || 1}
+                total={invoiceMeta.total || 0}
+                perPage={invoicesPerPage}
+                onChange={setInvoicePage}
+                label="invoices"
+              />
             </Card>
 
           </div>
@@ -995,84 +973,16 @@ const FinancePage = ({ user, onSignOut }) => {
 
                 <div className="modal-section-title">Assignment Target</div>
 
-                <div style={{ position: 'relative', marginBottom: '16px' }}>
-                  <Input
-                    label="Search Student or Guardian Name"
-                    id="assignSearchInput"
-                    placeholder="Type student or guardian name to filter list..."
-                    value={assignSearchQuery}
-                    onChange={(e) => {
-                      const newQuery = e.target.value;
-                      setAssignSearchQuery(newQuery);
-                      
-                      const queryLower = newQuery.toLowerCase().trim();
-                      if (queryLower) {
-                        const matches = rawStudents.filter(s => {
-                          const gUser = s.guardians && s.guardians[0] && s.guardians[0].user;
-                          const guardianStr = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || '');
-                          const studentName = s.first_name ? `${s.first_name} ${s.last_name}` : (s.name || '');
-                          return studentName.toLowerCase().includes(queryLower) || guardianStr.toLowerCase().includes(queryLower);
-                        });
-                        if (matches.length === 1) {
-                          setSelectedStudentId(String(matches[0].student_id || matches[0].id));
-                        }
-                      }
-                    }}
-                    iconLeft={<Search size={16} />}
-                    iconRight={
-                      assignSearchQuery ? (
-                        <button
-                          type="button"
-                          className="ui-input-toggle-btn"
-                          onClick={() => {
-                            setAssignSearchQuery('');
-                            setSelectedStudentId('');
-                          }}
-                          title="Clear search and selection"
-                        >
-                          <X size={16} />
-                        </button>
-                      ) : null
-                    }
-                  />
-                </div>
-                
-                <div className="select-input-wrapper">
-                  <label htmlFor="studentSelect" className="ui-input-label">
-                    Select Target Student ({filteredAssignStudents.length} matches)
-                  </label>
-                  <select
-                    id="studentSelect"
-                    className={`select-input ${assignFormErrors.studentId ? 'is-invalid' : ''}`}
-                    value={selectedStudentId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSelectedStudentId(val);
-                      if (val) {
-                        const found = rawStudents.find(s => String(s.student_id || s.id) === String(val));
-                        if (found) {
-                          const name = found.first_name ? `${found.first_name} ${found.last_name}` : (found.name || '');
-                          setAssignSearchQuery(name);
-                        }
-                      }
-                    }}
-                  >
-                    <option value="">-- Select Target Student --</option>
-                    {filteredAssignStudents.map((s) => {
-                      const gUser = s.guardians && s.guardians[0] && s.guardians[0].user;
-                      const guardianStr = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || 'No Guardian Linked');
-                      const studentName = s.first_name ? `${s.first_name} ${s.last_name}` : (s.name || `Student #${s.student_id || s.id}`);
-                      return (
-                        <option key={s.student_id || s.id} value={s.student_id || s.id}>
-                          {studentName} ({s.grade_level || 'Student'}) — Guardian: {guardianStr}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {assignFormErrors.studentId && (
-                    <span className="ui-input-error">{assignFormErrors.studentId}</span>
-                  )}
-                </div>
+                <AsyncSelect
+                  label="Search & Select Student"
+                  placeholder="Type student name..."
+                  fetchOptions={fetchStudents}
+                  value={selectedStudentId}
+                  onChange={(opt) => setSelectedStudentId(opt?.student_id || opt?.id || '')}
+                  getOptionLabel={(opt) => opt.label}
+                  getOptionValue={(opt) => opt.id}
+                  error={assignFormErrors.studentId}
+                />
 
                 <div className="select-input-wrapper">
                   <label htmlFor="feeStructureSelect" className="ui-input-label">Select Fee Structure Tier</label>

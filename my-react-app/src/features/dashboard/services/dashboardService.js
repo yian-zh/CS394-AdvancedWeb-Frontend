@@ -50,8 +50,9 @@ export const dashboardService = {
   // ==========================================
   // 👥 User Management
   // ==========================================
-  async getUsers({ page = 1, perPage = 10 } = {}) {
+  async getUsers({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
     const response = await fetch(`${API_URL}/users?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -96,8 +97,9 @@ export const dashboardService = {
   // ==========================================
   // 🗃️ Student Directory
   // ==========================================
-  async getStudents({ page = 1, perPage = 10 } = {}) {
+  async getStudents({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
     const response = await fetch(`${API_URL}/students?${params}`, {
       method: 'GET',
       headers: getHeaders(),

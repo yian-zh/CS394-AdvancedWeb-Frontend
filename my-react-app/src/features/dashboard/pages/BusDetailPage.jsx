@@ -20,9 +20,9 @@ const BusDetailPage = ({ user, onSignOut }) => {
   const { busId: rawBusId } = useParams();
   const navigate = useNavigate();
 
-  const { data: busesResponse, isLoading, error } = useBuses({ perPage: 1000 });
+  const { data: busesResponse, isLoading, error } = useBuses({ perPage: 200 });
   const rawBuses = busesResponse?.data ?? [];
-  const { data: routesResponse } = useRoutes({ perPage: 1000 });
+  const { data: routesResponse } = useRoutes({ perPage: 200 });
   const rawRoutes = routesResponse?.data ?? [];
   const uploadBusDocumentMutation = useUploadBusDocument();
   const updateBusMutation = useUpdateBus();

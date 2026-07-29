@@ -2,12 +2,14 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, MapPin, CloudUpload,
+  SlidersHorizontal, Download, X, MapPin, CloudUpload,
   GraduationCap, AlertTriangle, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import Pagination from '../../../components/ui/Pagination';
+import { useDebounce } from '../../../hooks/useDebounce';
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import { Edit3 } from 'lucide-react';
 import '../styles/dashboard.css';
@@ -23,6 +25,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
   const deleteUserMutation = useDeleteUser();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [activeTab, setActiveTab] = useState('All Users');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'
@@ -96,8 +99,8 @@ const UserManagementPage = ({ user, onSignOut }) => {
     if (activeTab === 'Administrators' && u.role !== 'Administrator') return false;
 
     // 2. Text Search
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
+    if (!debouncedSearch.trim()) return true;
+    const query = debouncedSearch.toLowerCase();
     return (
       u.name.toLowerCase().includes(query) ||
       u.id.toLowerCase().includes(query) ||
@@ -463,43 +466,14 @@ const UserManagementPage = ({ user, onSignOut }) => {
               </table>
             </div>
 
-            {/* Table pagination footer */}
-            <div className="pagination-footer">
-              <span className="pagination-info">
-                {paginationMeta.total
-                  ? `Showing ${((currentPage - 1) * itemsPerPage) + 1} to ${Math.min(currentPage * itemsPerPage, paginationMeta.total)} of ${paginationMeta.total} entries`
-                  : `Showing ${filteredUsers.length} entries`}
-              </span>
-
-              <div className="pagination-controls">
-                <button
-                  type="button"
-                  className="pagination-btn"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                {Array.from({ length: paginationMeta.last_page || 1 }).map((_, idx) => (
-                  <button
-                    key={idx + 1}
-                    type="button"
-                    className={`pagination-btn ${currentPage === idx + 1 ? 'is-active' : ''}`}
-                    onClick={() => setCurrentPage(idx + 1)}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="pagination-btn"
-                  disabled={currentPage === (paginationMeta.last_page || 1)}
-                  onClick={() => setCurrentPage(p => Math.min(paginationMeta.last_page || 1, p + 1))}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              currentPage={currentPage}
+              lastPage={paginationMeta.last_page || 1}
+              total={paginationMeta.total || 0}
+              perPage={itemsPerPage}
+              onChange={setCurrentPage}
+              label="users"
+            />
           </Card>
         </div>
       </main>

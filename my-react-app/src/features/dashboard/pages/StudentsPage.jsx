@@ -1,15 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, 
-  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, Filter, MapPin, CheckCircle2, DollarSign
+  SlidersHorizontal, Download, X, 
+  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import Pagination from '../../../components/ui/Pagination';
+import AsyncSelect from '../../../components/ui/AsyncSelect';
+import { useDebounce } from '../../../hooks/useDebounce';
 import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent } from '../hooks/useStudents';
-import { useUsers } from '../hooks/useUsers';
+import { dashboardService } from '../services/dashboardService';
 import { useRoutes } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
 
@@ -26,16 +29,16 @@ const StudentsPage = ({ user, onSignOut }) => {
   const { data: studentsResponse, isLoading, error } = useStudents({ page: currentPage, perPage: itemsPerPage });
   const rawStudents = studentsResponse?.data ?? [];
   const studentsMeta = studentsResponse?.meta ?? {};
-  const { data: usersResponse } = useUsers({ perPage: 1000 });
-  const rawUsers = usersResponse?.data ?? [];
-  const { data: routesResponse } = useRoutes({ perPage: 1000 });
+  const { data: routesResponse } = useRoutes({ perPage: 200 });
   const rawRoutes = routesResponse?.data ?? [];
+  const [guardianUserId, setGuardianUserId] = useState(null);
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [gradeFilter, setGradeFilter] = useState('All');
   const [routeFilter, setRouteFilter] = useState('All');
   
@@ -68,72 +71,29 @@ const StudentsPage = ({ user, onSignOut }) => {
     });
   }, [rawStudents]);
 
-  // Registered Guardians List fetched dynamically from the API (GET /api/users & GET /api/students)
-  const registeredGuardians = useMemo(() => {
-    const list = [];
-    const nameSet = new Set();
+  const fetchGuardians = useCallback(async (search) => {
+    const data = await dashboardService.getUsers({ search, perPage: 20 });
+    return (data?.data ?? []).map(u => ({
+      id: u.user_id || u.id,
+      label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+      sub: u.phone_number ? `Contact: ${u.phone_number}` : '',
+      phone: u.phone_number || '',
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+    }));
+  }, []);
 
-    // 1. Guardians fetched directly from API endpoint: GET /api/users
-    rawUsers.forEach((u) => {
-      const roleStr = (u.role || '').toLowerCase();
-      if (!roleStr || roleStr === 'guardian' || roleStr === 'parent') {
-        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.name || u.username;
-        if (fullName && !nameSet.has(fullName)) {
-          nameSet.add(fullName);
-          list.push({
-            id: u.user_id || u.id,
-            name: fullName,
-            phone: u.phone_number || u.phone || '',
-          });
-        }
-      }
-    });
-
-    // 2. Guardians linked to student records from API endpoint: GET /api/students
-    rawStudents.forEach((s) => {
-      const primaryGuardian = s.guardians && s.guardians[0];
-      const gUser = primaryGuardian && primaryGuardian.user;
-      const gName = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || null);
-      const gPhone = gUser ? gUser.phone_number : (s.phone || '');
-      if (gName && gName !== 'No Guardian' && !nameSet.has(gName)) {
-        nameSet.add(gName);
-        list.push({
-          id: `stu-g-${s.student_id || s.id}`,
-          name: gName,
-          phone: gPhone || '',
-        });
-      }
-    });
-
-    // 3. Initial seed data if database has no registered user records yet
-    if (list.length === 0) {
-      const fallbacks = [
-        { name: 'Sarah Johnson', phone: '555-0201' },
-        { name: 'James Brown', phone: '555-0202' },
-        { name: 'Michael Davis', phone: '555-0203' },
-        { name: 'Robert Wilson', phone: '555-0204' },
-        { name: 'Linda Martinez', phone: '555-0205' },
-        { name: 'David Taylor', phone: '555-0206' },
-        { name: 'Karen Anderson', phone: '555-0207' },
-        { name: 'Joseph Thomas', phone: '555-0208' },
-      ];
-
-      fallbacks.forEach((fb) => {
-        if (!nameSet.has(fb.name)) {
-          nameSet.add(fb.name);
-          list.push(fb);
-        }
-      });
+  const handleGuardianSelect = (selectedGuardian) => {
+    if (!selectedGuardian) {
+      setGuardianName('');
+      setPhone('');
+      setGuardianUserId(null);
+      return;
     }
-
-    return list;
-  }, [rawUsers, rawStudents]);
-
-  const handleGuardianSelect = (selectedName) => {
-    setGuardianName(selectedName);
-    const found = registeredGuardians.find((g) => g.name === selectedName);
-    if (found && found.phone && found.phone !== 'N/A') {
-      setPhone(found.phone);
+    const name = typeof selectedGuardian === 'string' ? selectedGuardian : selectedGuardian.name || selectedGuardian.label;
+    setGuardianName(name);
+    setGuardianUserId(selectedGuardian?.user_id || selectedGuardian?.id || null);
+    if (selectedGuardian?.phone && selectedGuardian.phone !== 'N/A') {
+      setPhone(selectedGuardian.phone);
     }
   };
 
@@ -224,18 +184,20 @@ const StudentsPage = ({ user, onSignOut }) => {
 
   // Search & Filter logic
   const filteredStudents = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
     return students.filter((s) => {
       const matchesSearch = 
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.guardianName.toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        s.name.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        s.guardianName.toLowerCase().includes(q);
         
       const matchesGrade = gradeFilter === 'All' || s.grade === gradeFilter;
       const matchesRoute = routeFilter === 'All' || s.assignedRoute === routeFilter;
 
       return matchesSearch && matchesGrade && matchesRoute;
     });
-  }, [students, searchQuery, gradeFilter, routeFilter]);
+  }, [students, debouncedSearch, gradeFilter, routeFilter]);
 
   // Modal Openers
   const openAddModal = () => {
@@ -248,12 +210,14 @@ const StudentsPage = ({ user, onSignOut }) => {
     setAssignedRoute('Unassigned');
     setGender('Male');
     setPhone('');
+    setGuardianUserId(null);
     setFormErrors({});
     setInitialFormState(null);
     setIsModalOpen(true);
   };
 
   const openEditModal = (student) => {
+    setGuardianUserId(null);
     setModalMode('edit');
     setSelectedStudentId(student.id);
     const names = student.name.split(' ');
@@ -310,9 +274,6 @@ const StudentsPage = ({ user, onSignOut }) => {
 
     setIsSubmitting(true);
     try {
-      const selectedGuardianObj = registeredGuardians.find((g) => g.name === guardianName.trim());
-      const guardianUserId = selectedGuardianObj && typeof selectedGuardianObj.id === 'number' ? selectedGuardianObj.id : null;
-
       const studentData = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -765,45 +726,14 @@ const StudentsPage = ({ user, onSignOut }) => {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            <div className="pagination-footer">
-              <span className="pagination-info">
-                {studentsMeta.total
-                  ? `Showing ${((currentPage - 1) * itemsPerPage) + 1} to ${Math.min(currentPage * itemsPerPage, studentsMeta.total)} of ${studentsMeta.total} students`
-                  : `Showing ${filteredStudents.length} students`}
-              </span>
-
-              <div className="pagination-controls">
-                <button 
-                  type="button" 
-                  className="pagination-btn" 
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                
-                {Array.from({ length: studentsMeta.last_page || 1 }).map((_, idx) => (
-                  <button 
-                    key={idx + 1}
-                    type="button" 
-                    className={`pagination-btn ${currentPage === idx + 1 ? 'is-active' : ''}`}
-                    onClick={() => setCurrentPage(idx + 1)}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-                
-                <button 
-                  type="button" 
-                  className="pagination-btn" 
-                  disabled={currentPage === (studentsMeta.last_page || 1)}
-                  onClick={() => setCurrentPage(p => Math.min(studentsMeta.last_page || 1, p + 1))}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
+            <Pagination
+              currentPage={currentPage}
+              lastPage={studentsMeta.last_page || 1}
+              total={studentsMeta.total || 0}
+              perPage={itemsPerPage}
+              onChange={setCurrentPage}
+              label="students"
+            />
           </Card>
         </div>
       </main>
@@ -878,25 +808,16 @@ const StudentsPage = ({ user, onSignOut }) => {
                 </div>
 
                 <div className="modal-section-title">Guardian & Contact</div>
-                <div className="select-input-wrapper">
-                  <label htmlFor="guardianSelect" className="ui-input-label">Select Registered Guardian</label>
-                  <select
-                    id="guardianSelect"
-                    className={`select-input ${formErrors.guardianName ? 'is-invalid' : ''}`}
-                    value={guardianName}
-                    onChange={(e) => handleGuardianSelect(e.target.value)}
-                  >
-                    <option value="">-- Select Registered Guardian --</option>
-                    {registeredGuardians.map((g, idx) => (
-                      <option key={g.id || idx} value={g.name}>
-                        {g.name} {g.phone && g.phone !== 'N/A' ? `(${g.phone})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors.guardianName && (
-                    <span className="ui-input-error">{formErrors.guardianName}</span>
-                  )}
-                </div>
+                <AsyncSelect
+                  label="Search & Select Registered Guardian"
+                  placeholder="Type guardian name..."
+                  fetchOptions={fetchGuardians}
+                  value={guardianName}
+                  onChange={(opt) => handleGuardianSelect(opt)}
+                  getOptionLabel={(opt) => opt.label}
+                  getOptionValue={(opt) => opt.id}
+                  error={formErrors.guardianName}
+                />
 
                 <div className="modal-row-2col">
                   <Input

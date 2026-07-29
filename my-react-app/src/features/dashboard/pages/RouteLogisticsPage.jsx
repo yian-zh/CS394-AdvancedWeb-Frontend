@@ -1,13 +1,17 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, ChevronLeft, ChevronRight, X, MapPin, 
+  SlidersHorizontal, X, MapPin, 
   GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2, DollarSign
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import Pagination from '../../../components/ui/Pagination';
+import AsyncSelect from '../../../components/ui/AsyncSelect';
+import { useDebounce } from '../../../hooks/useDebounce';
+import { dashboardService } from '../services/dashboardService';
 import { useRoutes, useCreateRoute, useUpdateRoute, useDeleteRoute } from '../hooks/useRoutes';
 import { useBuses } from '../hooks/useFleet';
 import { useUsers } from '../hooks/useUsers';
@@ -65,15 +69,14 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const { data: routesResponse, isLoading, error } = useRoutes({ page: currentPage, perPage: itemsPerPage });
   const rawRoutes = routesResponse?.data ?? [];
   const routesMeta = routesResponse?.meta ?? {};
-  const { data: busesResponse } = useBuses({ perPage: 1000 });
+  const { data: busesResponse } = useBuses({ perPage: 200 });
   const rawBuses = busesResponse?.data ?? [];
-  const { data: usersResponse } = useUsers({ perPage: 1000 });
-  const rawUsers = usersResponse?.data ?? [];
   const createRouteMutation = useCreateRoute();
   const updateRouteMutation = useUpdateRoute();
   const deleteRouteMutation = useDeleteRoute();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter, setStatusFilter] = useState('All'); // All | Active | Delayed
   
   // Modals state
@@ -98,43 +101,18 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const [formErrors, setFormErrors] = useState({});
 
   // Searchable dropdown states
-  const [driverSearchQuery, setDriverSearchQuery] = useState('');
-  const [isDriverDropdownOpen, setIsDriverDropdownOpen] = useState(false);
   const [busSearchQuery, setBusSearchQuery] = useState('');
   const [isBusDropdownOpen, setIsBusDropdownOpen] = useState(false);
 
-  // Available drivers list dynamically derived from backend users or defaults
-  const driverOptions = useMemo(() => {
-    if (rawUsers && rawUsers.length > 0) {
-      const userDrivers = rawUsers
-        .filter(u => {
-          const role = (u.role || '').toLowerCase();
-          return role === 'driver' || role === 'admin';
-        })
-        .map(u => ({
-          id: String(u.user_id),
-          user_id: u.user_id,
-          name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
-          license: u.phone_number ? `Contact: ${u.phone_number}` : `#${u.user_id}`,
-          status: u.status === false ? 'On Leave' : 'Available'
-        }));
-      if (userDrivers.length > 0) return userDrivers;
-      return rawUsers.map(u => ({
-        id: String(u.user_id),
-        user_id: u.user_id,
-        name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
-        license: u.phone_number ? `Contact: ${u.phone_number}` : `#${u.user_id}`,
-        status: u.status === false ? 'On Leave' : 'Available'
-      }));
-    }
-    return [];
-  }, [rawUsers]);
-
-  const filteredDriverOptions = useMemo(() => {
-    if (!driverSearchQuery.trim()) return driverOptions;
-    const q = driverSearchQuery.toLowerCase();
-    return driverOptions.filter(d => d.name.toLowerCase().includes(q) || d.license.toLowerCase().includes(q));
-  }, [driverOptions, driverSearchQuery]);
+  const fetchDrivers = useCallback(async (search) => {
+    const data = await dashboardService.getUsers({ search, perPage: 20 });
+    return (data?.data ?? []).map(u => ({
+      id: u.user_id,
+      label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+      sub: u.phone_number ? `Contact: ${u.phone_number}` : `ID: ${u.user_id}`,
+      user_id: u.user_id,
+    }));
+  }, []);
 
   const busOptions = useMemo(() => {
     return (rawBuses || []).map(b => ({
@@ -176,12 +154,9 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
       } else if (r.driver) {
         driverName = `${r.driver.first_name || ''} ${r.driver.last_name || ''}`.trim() || r.driver.username;
         initials = `${(r.driver.first_name || 'D')[0]}${(r.driver.last_name || 'R')[0]}`.toUpperCase();
-      } else if (r.driver_id && rawUsers && rawUsers.length > 0) {
-        const found = rawUsers.find(u => String(u.user_id) === String(r.driver_id));
-        if (found) {
-          driverName = `${found.first_name || ''} ${found.last_name || ''}`.trim() || found.username;
-          initials = `${(found.first_name || 'D')[0]}${(found.last_name || 'R')[0]}`.toUpperCase();
-        }
+      } else if (r.driver_id) {
+        driverName = `Driver #${r.driver_id}`;
+        initials = 'DR';
       }
       const routeIdStr = String(r.route_id);
       const name = routeOverrides[routeIdStr] || r.route_name;
@@ -202,7 +177,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
         capacityTotal: 60
       };
     });
-  }, [rawRoutes, routeOverrides, rawUsers]);
+  }, [rawRoutes, routeOverrides]);
 
   const busOptionsWithSchedule = useMemo(() => {
     return busOptions.map(b => {
@@ -234,11 +209,10 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const handleAddRoute = async (e) => {
     e.preventDefault();
     if (createRouteMutation.isPending) return;
-    if (!newRouteName.trim() || !newDriverName.trim() || !newBusId.trim()) return;
+    if (!newRouteName.trim() || !newDriverName || !newBusId.trim()) return;
 
     try {
-      const selectedDriverObj = driverOptions.find(d => d.name === newDriverName);
-      const driverIdNum = selectedDriverObj?.user_id || selectedDriverObj?.id || selectedDriverObj?.driver_id;
+      const driverIdNum = newDriverName?.user_id || newDriverName?.id;
 
       const routeData = {
         route_name: newRouteName.trim(),
@@ -253,8 +227,8 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
       const createdId = createdRoute?.route_id || createdRoute?.id;
       if (createdId) {
         localStorage.setItem(`sbms_route_timewindow_${createdId}`, newTimeWindow);
-        if (selectedDriverObj) {
-          localStorage.setItem(`sbms_route_driver_${createdId}`, selectedDriverObj.name);
+        if (newDriverName) {
+          localStorage.setItem(`sbms_route_driver_${createdId}`, newDriverName.label || newDriverName.name);
         }
       }
 
@@ -262,7 +236,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
       // Reset Form
       setNewRouteName('');
-      setNewDriverName('');
+      setNewDriverName(null);
       setNewBusId('');
       setStartTime('07:00 AM');
       setEndTime('08:30 AM');
@@ -348,9 +322,11 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
   // Filter routes based on search and status tabs
   const filteredRoutes = routes.filter(r => {
-    const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          r.driver.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          r.busId.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = debouncedSearch.toLowerCase();
+    const matchesSearch = !q ||
+      r.name.toLowerCase().includes(q) || 
+      r.driver.toLowerCase().includes(q) ||
+      r.busId.toLowerCase().includes(q);
     
     const matchesStatus = statusFilter === 'All' || 
                           r.status.toLowerCase() === statusFilter.toLowerCase();
@@ -658,53 +634,14 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
             )}
           </div>
 
-          {/* Pagination Footer */}
-          <div className="pagination-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '32px', borderTop: '1px solid rgba(197, 197, 211, 0.2)', paddingTop: '20px' }}>
-            <span style={{ fontSize: '13px', color: 'var(--icon-color)' }}>
-              {routesMeta.total
-                ? `Showing ${((currentPage - 1) * itemsPerPage) + 1} to ${Math.min(currentPage * itemsPerPage, routesMeta.total)} of ${routesMeta.total} active routes`
-                : `Showing ${filteredRoutes.length} of ${routes.length} active routes`}
-            </span>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                type="button"
-                className="pagination-btn"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: currentPage === 1 ? '#cbd5e1' : '#64748b', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center' }}
-              >
-                <ChevronLeft size={14} />
-              </button>
-              {Array.from({ length: routesMeta.last_page || 1 }).map((_, idx) => (
-                <button
-                  key={idx + 1}
-                  type="button"
-                  className={`pagination-btn ${currentPage === idx + 1 ? 'active' : ''}`}
-                  onClick={() => setCurrentPage(idx + 1)}
-                  style={{
-                    padding: '6px 12px',
-                    border: currentPage === idx + 1 ? '1px solid var(--primary-brand)' : '1px solid #cbd5e1',
-                    borderRadius: '6px',
-                    backgroundColor: currentPage === idx + 1 ? 'var(--primary-brand)' : '#ffffff',
-                    color: currentPage === idx + 1 ? '#ffffff' : '#64748b',
-                    cursor: 'pointer',
-                    fontWeight: currentPage === idx + 1 ? 600 : 400
-                  }}
-                >
-                  {idx + 1}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="pagination-btn"
-                disabled={currentPage === (routesMeta.last_page || 1)}
-                onClick={() => setCurrentPage(p => Math.min(routesMeta.last_page || 1, p + 1))}
-                style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', backgroundColor: '#ffffff', color: currentPage === (routesMeta.last_page || 1) ? '#cbd5e1' : '#64748b', cursor: currentPage === (routesMeta.last_page || 1) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center' }}
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            lastPage={routesMeta.last_page || 1}
+            total={routesMeta.total || 0}
+            perPage={itemsPerPage}
+            onChange={setCurrentPage}
+            label="active routes"
+          />
         </div>
       </main>
 
@@ -739,97 +676,15 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
                 {/* Driver & Bus ID Searchable Dropdowns */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  {/* Searchable Driver Dropdown */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left', position: 'relative' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>Driver Name</label>
-                    <div 
-                      onClick={() => {
-                        setIsDriverDropdownOpen(!isDriverDropdownOpen);
-                        setIsBusDropdownOpen(false);
-                      }}
-                      style={{
-                        padding: '9px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid rgba(197, 197, 211, 0.5)',
-                        backgroundColor: '#ffffff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        fontSize: '13px',
-                        fontWeight: newDriverName ? 600 : 400,
-                        color: newDriverName ? 'var(--text-dark)' : '#94a3b8'
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        <Users size={15} style={{ color: 'var(--primary-brand)', flexShrink: 0 }} />
-                        {newDriverName || 'Select Driver...'}
-                      </span>
-                      <ChevronDown size={14} style={{ color: '#64748b', flexShrink: 0 }} />
-                    </div>
-
-                    {isDriverDropdownOpen && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        right: 0,
-                        marginTop: '4px',
-                        backgroundColor: '#ffffff',
-                        border: '1px solid rgba(197, 197, 211, 0.4)',
-                        borderRadius: '8px',
-                        boxShadow: '0 10px 25px rgba(0,0,0,0.12)',
-                        zIndex: 100,
-                        padding: '8px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px'
-                      }}>
-                        <Input 
-                          type="text" 
-                          icon={<Search size={13} />}
-                          placeholder="Search driver..."
-                          value={driverSearchQuery}
-                          onChange={(e) => setDriverSearchQuery(e.target.value)}
-                          autoFocus
-                        />
-                        <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                          {filteredDriverOptions.length > 0 ? (
-                            filteredDriverOptions.map(driver => (
-                              <div
-                                key={driver.id}
-                                onClick={() => {
-                                  setNewDriverName(driver.name);
-                                  setIsDriverDropdownOpen(false);
-                                  setDriverSearchQuery('');
-                                }}
-                                style={{
-                                  padding: '8px 10px',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  backgroundColor: newDriverName === driver.name ? 'rgba(0, 35, 111, 0.06)' : 'transparent',
-                                  fontSize: '13px'
-                                }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = newDriverName === driver.name ? 'rgba(0, 35, 111, 0.06)' : 'transparent'}
-                              >
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{driver.name}</span>
-                                  <span style={{ fontSize: '11px', color: '#64748b' }}>{driver.license} • {driver.status}</span>
-                                </div>
-                                {newDriverName === driver.name && <Check size={15} style={{ color: 'var(--primary-brand)' }} />}
-                              </div>
-                            ))
-                          ) : (
-                            <div style={{ padding: '8px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>No drivers match search</div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <AsyncSelect
+                    label="Driver Name"
+                    placeholder="Search driver..."
+                    fetchOptions={fetchDrivers}
+                    value={newDriverName}
+                    onChange={setNewDriverName}
+                    getOptionLabel={(opt) => opt.label}
+                    getOptionValue={(opt) => opt.id}
+                  />
 
                   {/* Searchable Bus ID Dropdown */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left', position: 'relative' }}>
