@@ -3,32 +3,18 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, ChevronLeft, ChevronRight, X, 
-  GraduationCap, MapPin, DollarSign, Filter, Edit3, AlertCircle, CheckCircle2, UserCheck, Send
+  GraduationCap, MapPin, DollarSign, Filter, Edit3, AlertCircle, CheckCircle2, UserCheck
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
-import { useFeeStructures, useCreateFeeStructure, useUpdateFeeStructure, useAssignFeeStructure, useInvoices, useGenerateInvoices, useUpdateInvoiceStatus, useSendInvoice, useSendAllInvoices, useSendStudentInvoice } from '../hooks/useFinance';
+import { useFeeStructures, useCreateFeeStructure, useUpdateFeeStructure, useAssignFeeStructure, useInvoices, useGenerateInvoices, useUpdateInvoiceStatus, useRecordPayment } from '../hooks/useFinance';
 import { useUsers } from '../hooks/useUsers';
 import { useStudents } from '../hooks/useStudents';
 import '../styles/dashboard.css';
 
 // Fallback fee structure matching the reference mockup if backend has no records yet
-const INITIAL_FEE_STRUCTURES = [
-  { fee_structure_id: 1, fee_name: 'Standard Route (Monthly)', base_amount: '150.00', color: '#1e40af' },
-  { fee_structure_id: 2, fee_name: 'Special Ed (Monthly)', base_amount: '220.00', color: '#475569' },
-  { fee_structure_id: 3, fee_name: 'Field Trip (Hourly)', base_amount: '45.00', color: '#9a3412' },
-  { fee_structure_id: 4, fee_name: 'Late Fee Penalty', base_amount: '25.00', color: '#dc2626' }
-];
-
-// Fallback payments ledger matching the reference mockup
-const INITIAL_LEDGER = [
-  { invoice_id: '#INV-2023-089', payer: 'Sarah Smith', date: 'Oct 24, 2023', amount: '$12,450.00', status: 'Paid' },
-  { invoice_id: '#INV-2023-090', payer: 'Sarah Smith', date: 'Oct 23, 2023', amount: '$8,200.00', status: 'Overdue' },
-  { invoice_id: '#INV-2023-091', payer: 'Sarah Smith', date: 'Oct 22, 2023', amount: '$15,600.00', status: 'Paid' },
-  { invoice_id: '#INV-2023-092', payer: 'Sarah Smith', date: 'Oct 21, 2023', amount: '$4,500.00', status: 'Pending' },
-  { invoice_id: '#INV-2023-093', payer: 'Sarah Smith', date: 'Oct 20, 2023', amount: '$9,100.00', status: 'Paid' }
-];
+const PAYMENT_METHODS = ['Cash', 'Check', 'Credit Card', 'Debit Card', 'Bank Transfer', 'Online'];
 
 const FinancePage = ({ user, onSignOut }) => {
   const [feePage, setFeePage] = useState(1);
@@ -51,9 +37,14 @@ const FinancePage = ({ user, onSignOut }) => {
   const assignFeeMutation = useAssignFeeStructure();
   const generateInvoicesMutation = useGenerateInvoices();
   const updateInvoiceStatusMutation = useUpdateInvoiceStatus();
-  const sendInvoiceMutation = useSendInvoice();
-  const sendStudentInvoiceMutation = useSendStudentInvoice();
-  const sendAllInvoicesMutation = useSendAllInvoices();
+  const recordPaymentMutation = useRecordPayment();
+
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [transactionReference, setTransactionReference] = useState('');
+  const [paymentFormErrors, setPaymentFormErrors] = useState({});
 
   const handleStatusChange = async (rawId, newStatus) => {
     if (!rawId) return;
@@ -141,44 +132,13 @@ const FinancePage = ({ user, onSignOut }) => {
         color: idx % 4 === 0 ? '#1e40af' : (idx % 4 === 1 ? '#475569' : (idx % 4 === 2 ? '#9a3412' : '#dc2626'))
       }));
     }
-    return INITIAL_FEE_STRUCTURES;
+    return [];
   }, [rawFeeStructures]);
 
   // Computed Assigned Student Fees List
   const assignedStudentFees = useMemo(() => {
     if (!rawStudents || rawStudents.length === 0) {
-      return [
-        {
-          student_id: 1,
-          student_name: 'Alex Johnson',
-          grade: 'Grade 10',
-          guardian_name: 'Sarah Smith',
-          fee_name: 'Standard Route (Monthly)',
-          base_amount: '150.00',
-          color: '#1e40af',
-          fee_structure_id: 1
-        },
-        {
-          student_id: 2,
-          student_name: 'Emily Davis',
-          grade: 'Grade 8',
-          guardian_name: 'Sarah Johnson',
-          fee_name: 'Special Ed (Monthly)',
-          base_amount: '220.00',
-          color: '#475569',
-          fee_structure_id: 2
-        },
-        {
-          student_id: 3,
-          student_name: 'Michael Brown',
-          grade: 'Grade 6',
-          guardian_name: 'James Brown',
-          fee_name: 'Field Trip (Hourly)',
-          base_amount: '45.00',
-          color: '#9a3412',
-          fee_structure_id: 3
-        }
-      ];
+      return [];
     }
 
     return rawStudents.map((s, idx) => {
@@ -186,8 +146,9 @@ const FinancePage = ({ user, onSignOut }) => {
       const guardianStr = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || 'No Guardian Linked');
       const studentName = s.first_name ? `${s.first_name} ${s.last_name}` : (s.name || `Student #${s.student_id || s.id}`);
       
-      const assignedTier = s.fee_structure 
-        ? s.fee_structure 
+      const sFee = (s.fee_structures && s.fee_structures.length > 0) ? s.fee_structures[0] : s.fee_structure;
+      const assignedTier = sFee 
+        ? sFee 
         : (feeStructures[idx % feeStructures.length] || feeStructures[0]);
 
       return {
@@ -219,13 +180,6 @@ const FinancePage = ({ user, onSignOut }) => {
       }
     });
 
-    if (list.length === 0) {
-      return [
-        { id: 1, name: 'Sarah Smith', email: 'sarah.smith@example.com' },
-        { id: 2, name: 'Sarah Johnson', email: 'sarah.j@example.com' },
-        { id: 3, name: 'James Brown', email: 'jbrown@example.com' }
-      ];
-    }
     return list;
   }, [rawUsers]);
 
@@ -236,25 +190,50 @@ const FinancePage = ({ user, onSignOut }) => {
         const guardianUser = inv.guardian && inv.guardian.user;
         const payerName = guardianUser ? `${guardianUser.first_name} ${guardianUser.last_name}` : 'District Guardian';
         const formattedAmount = `$${parseFloat(inv.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+        const rawId = inv.invoice_id ?? inv.id;
+
+        const guardianId = inv.guardian?.guardian_id || inv.guardian_id || inv.guardian?.id;
+        let feeTier = '';
+        if (guardianId && rawStudents?.length > 0) {
+          const names = rawStudents
+            .filter((s) => s.guardians?.some((g) => String(g.guardian_id || g.id) === String(guardianId)))
+            .map((s) => {
+              const matchedAssigned = assignedStudentFees.find((as) => String(as.student_id) === String(s.student_id || s.id));
+              if (matchedAssigned) return matchedAssigned.fee_name;
+
+              const sFee = (s.fee_structures && s.fee_structures.length > 0) ? s.fee_structures[0] : s.fee_structure;
+              const tier = sFee || feeStructures.find((f) => String(f.fee_structure_id) === String(s.fee_structure_id));
+              return tier?.fee_name || tier?.name || '';
+            })
+            .filter(Boolean);
+          feeTier = [...new Set(names)].join(', ');
+        }
+
+        if (!feeTier && feeStructures.length > 0) {
+          feeTier = feeStructures[0]?.fee_name || 'Standard Route (Monthly)';
+        }
+
         return {
-          raw_id: inv.invoice_id,
-          invoice_id: `#INV-${inv.invoice_id}`,
+          raw_id: rawId,
+          invoice_id: `#INV-${rawId}`,
           payer: payerName,
+          fee_tier: feeTier,
           date: inv.invoice_date || 'Oct 24, 2023',
           amount: formattedAmount,
           status: inv.status || 'Paid'
         };
       });
     }
-    return INITIAL_LEDGER;
-  }, [rawInvoices]);
+    return [];
+  }, [rawInvoices, rawStudents, feeStructures, assignedStudentFees]);
 
   // Filtered Ledger
   const filteredLedger = useMemo(() => {
-    return ledger.filter((item) => {
+      return ledger.filter((item) => {
       const matchesSearch = 
         item.invoice_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.payer.toLowerCase().includes(searchQuery.toLowerCase());
+        item.payer.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.fee_tier.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -362,48 +341,51 @@ const FinancePage = ({ user, onSignOut }) => {
     }
   };
 
-  const handleSendInvoice = async (invoiceId) => {
-    try {
-      await sendInvoiceMutation.mutateAsync(invoiceId);
-      setNotification({
-        type: 'success',
-        message: `Invoice #${invoiceId} sent to the guardian successfully!`
-      });
-    } catch (err) {
-      setNotification({
-        type: 'error',
-        message: err.message || 'Failed to send invoice'
-      });
-    }
+  const openRecordPaymentModal = (invoice) => {
+    setSelectedInvoiceForPayment(invoice);
+    setPaymentAmount('');
+    setPaymentMethod('');
+    setTransactionReference('');
+    setPaymentFormErrors({});
+    setIsPaymentModalOpen(true);
   };
 
-  const handleSendStudentInvoice = async (studentId, studentName) => {
-    try {
-      await sendStudentInvoiceMutation.mutateAsync(studentId);
-      setNotification({
-        type: 'success',
-        message: `Invoice for ${studentName} sent to their guardian!`
-      });
-    } catch (err) {
-      setNotification({
-        type: 'error',
-        message: err.message || 'Failed to send student invoice'
-      });
-    }
+  const closeRecordPaymentModal = () => {
+    setIsPaymentModalOpen(false);
+    setSelectedInvoiceForPayment(null);
+    setPaymentAmount('');
+    setPaymentMethod('');
+    setTransactionReference('');
+    setPaymentFormErrors({});
   };
 
-  const handleSendAllInvoices = async () => {
+  const handleRecordPaymentSubmit = async (e) => {
+    e.preventDefault();
+    const errors = {};
+    if (!paymentAmount || isNaN(paymentAmount) || parseFloat(paymentAmount) <= 0) {
+      errors.amount_paid = 'Valid payment amount is required';
+    }
+    if (!paymentMethod) {
+      errors.payment_method = 'Payment method is required';
+    }
+    if (Object.keys(errors).length > 0) {
+      setPaymentFormErrors(errors);
+      return;
+    }
     try {
-      await sendAllInvoicesMutation.mutateAsync();
+      await recordPaymentMutation.mutateAsync({
+        invoice_id: selectedInvoiceForPayment.raw_id,
+        amount_paid: parseFloat(paymentAmount),
+        payment_method: paymentMethod,
+        transaction_reference: transactionReference.trim() || null,
+      });
       setNotification({
         type: 'success',
-        message: 'All invoices sent to their respective guardians!'
+        message: `Payment of $${parseFloat(paymentAmount).toFixed(2)} recorded for ${selectedInvoiceForPayment.invoice_id}!`
       });
+      closeRecordPaymentModal();
     } catch (err) {
-      setNotification({
-        type: 'error',
-        message: err.message || 'Failed to send all invoices'
-      });
+      setPaymentFormErrors({ submit: err.message || 'Failed to record payment' });
     }
   };
 
@@ -581,16 +563,7 @@ const FinancePage = ({ user, onSignOut }) => {
                   <DollarSign size={16} />
                   {generateInvoicesMutation.isPending ? 'Generating Invoices...' : 'Generate Invoices'}
                 </button>
-                <button 
-                  type="button" 
-                  className="add-user-btn"
-                  onClick={handleSendAllInvoices}
-                  disabled={sendAllInvoicesMutation.isPending}
-                  style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#2563eb' }}
-                >
-                  <Send size={16} />
-                  {sendAllInvoicesMutation.isPending ? 'Sending All...' : 'Send All'}
-                </button>
+
                 <button 
                   type="button" 
                   className="action-btn"
@@ -650,29 +623,7 @@ const FinancePage = ({ user, onSignOut }) => {
                       </td>
                       <td style={{ padding: '14px 20px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleSendStudentInvoice(row.student_id, row.student_name)}
-                            disabled={sendStudentInvoiceMutation.isPending}
-                            title={`Send invoice for ${row.student_name} to guardian`}
-                            style={{
-                              padding: '4px 8px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              backgroundColor: '#2563eb',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: sendStudentInvoiceMutation.isPending ? 'not-allowed' : 'pointer',
-                              opacity: sendStudentInvoiceMutation.isPending ? 0.6 : 1,
-                            }}
-                          >
-                            <Send size={12} />
-                            Send
-                          </button>
+
                           <button
                             type="button"
                             className="action-btn"
@@ -803,15 +754,17 @@ const FinancePage = ({ user, onSignOut }) => {
                     <tr>
                       <th style={{ padding: '14px 20px', fontSize: '11px' }}>Invoice ID</th>
                       <th style={{ padding: '14px 20px', fontSize: '11px' }}>Payer</th>
+                      <th style={{ padding: '14px 20px', fontSize: '11px' }}>Fee Tier</th>
                       <th style={{ padding: '14px 20px', fontSize: '11px' }}>Date</th>
                       <th style={{ padding: '14px 20px', fontSize: '11px' }}>Amount</th>
                       <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'center' }}>Status</th>
+                      <th style={{ padding: '14px 20px', fontSize: '11px', textAlign: 'center' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {isInvoicesLoading ? (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--primary-brand)' }}>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: 'var(--primary-brand)' }}>
                           Loading payments ledger...
                         </td>
                       </tr>
@@ -823,6 +776,9 @@ const FinancePage = ({ user, onSignOut }) => {
                           </td>
                           <td style={{ padding: '14px 20px', fontWeight: '500', fontSize: '13px', color: '#334155' }}>
                             {row.payer}
+                          </td>
+                          <td style={{ padding: '14px 20px', fontSize: '13px', color: '#1e293b' }}>
+                            {row.fee_tier || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>—</span>}
                           </td>
                           <td style={{ padding: '14px 20px', fontSize: '13px', color: '#64748b' }}>
                             {row.date}
@@ -853,11 +809,34 @@ const FinancePage = ({ user, onSignOut }) => {
                               <option value="Unpaid">Unpaid</option>
                             </select>
                           </td>
+                          <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                            {row.status !== 'Paid' ? (
+                              <button
+                                type="button"
+                                onClick={() => openRecordPaymentModal(row)}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  backgroundColor: '#16a34a',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                Record Payment
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: '#94a3b8' }}>—</span>
+                            )}
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '24px', color: 'var(--icon-color)' }}>
+                        <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: 'var(--icon-color)' }}>
                           No invoice records found.
                         </td>
                       </tr>
@@ -1138,6 +1117,96 @@ const FinancePage = ({ user, onSignOut }) => {
           </div>
         </div>
       )}
+
+      {/* RECORD PAYMENT MODAL */}
+      {isPaymentModalOpen && selectedInvoiceForPayment && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <header className="modal-header">
+              <h2>Record Payment for {selectedInvoiceForPayment.invoice_id}</h2>
+              <button 
+                type="button" 
+                className="modal-close-btn" 
+                onClick={closeRecordPaymentModal}
+                disabled={recordPaymentMutation.isPending}
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <form onSubmit={handleRecordPaymentSubmit}>
+              <div className="modal-body">
+                {paymentFormErrors.submit && (
+                  <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', padding: '10px', borderRadius: '6px', marginBottom: '16px', fontSize: '13px' }}>
+                    {paymentFormErrors.submit}
+                  </div>
+                )}
+                <div className="modal-section-title">Invoice Details</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px', fontSize: '13px', color: '#334155' }}>
+                  <div><strong>Invoice:</strong> {selectedInvoiceForPayment.invoice_id}</div>
+                  <div><strong>Payer:</strong> {selectedInvoiceForPayment.payer}</div>
+                  <div><strong>Total:</strong> {selectedInvoiceForPayment.amount}</div>
+                  <div><strong>Status:</strong> {selectedInvoiceForPayment.status}</div>
+                </div>
+                <div className="modal-section-title">Payment Information</div>
+                <Input
+                  label="Amount Paid ($)"
+                  id="paymentAmountInput"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="0.00"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  error={paymentFormErrors.amount_paid}
+                />
+                <div className="select-input-wrapper">
+                  <label htmlFor="paymentMethodSelect" className="ui-input-label">Payment Method</label>
+                  <select
+                    id="paymentMethodSelect"
+                    className={`select-input ${paymentFormErrors.payment_method ? 'is-invalid' : ''}`}
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                  >
+                    <option value="">-- Select Payment Method --</option>
+                    {PAYMENT_METHODS.map((method) => (
+                      <option key={method} value={method}>{method}</option>
+                    ))}
+                  </select>
+                  {paymentFormErrors.payment_method && (
+                    <span className="ui-input-error">{paymentFormErrors.payment_method}</span>
+                  )}
+                </div>
+                <Input
+                  label="Transaction Reference (optional)"
+                  id="transactionRefInput"
+                  placeholder="e.g. REF-001"
+                  value={transactionReference}
+                  onChange={(e) => setTransactionReference(e.target.value)}
+                />
+              </div>
+              <div className="modal-footer">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={closeRecordPaymentModal}
+                  disabled={recordPaymentMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  variant="primary"
+                  disabled={recordPaymentMutation.isPending}
+                  isLoading={recordPaymentMutation.isPending}
+                >
+                  {recordPaymentMutation.isPending ? 'Recording...' : 'Record Payment'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

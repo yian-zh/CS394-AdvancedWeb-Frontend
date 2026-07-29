@@ -35,6 +35,7 @@ export const useAssignFeeStructure = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feeStructures'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
     },
   });
 };
@@ -66,30 +67,10 @@ export const useUpdateInvoiceStatus = () => {
   });
 };
 
-export const useSendInvoice = () => {
+export const useRecordPayment = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id) => dashboardService.sendInvoice(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-    },
-  });
-};
-
-export const useSendStudentInvoice = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (studentId) => dashboardService.sendStudentInvoice(studentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-    },
-  });
-};
-
-export const useSendAllInvoices = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: dashboardService.sendAllInvoices,
+    mutationFn: dashboardService.recordPayment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     },

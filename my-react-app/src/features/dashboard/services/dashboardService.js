@@ -330,26 +330,11 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
-  async sendInvoice(id) {
-    const response = await fetch(`${API_URL}/billing/invoices/${id}/send`, {
+  async recordPayment(paymentData) {
+    const response = await fetch(`${API_URL}/billing/payments`, {
       method: 'POST',
       headers: getHeaders(),
-    });
-    return handleResponse(response);
-  },
-
-  async sendStudentInvoice(studentId) {
-    const response = await fetch(`${API_URL}/billing/students/${studentId}/send-invoice`, {
-      method: 'POST',
-      headers: getHeaders(),
-    });
-    return handleResponse(response);
-  },
-
-  async sendAllInvoices() {
-    const response = await fetch(`${API_URL}/billing/invoices/send-all`, {
-      method: 'POST',
-      headers: getHeaders(),
+      body: JSON.stringify(paymentData),
     });
     return handleResponse(response);
   },
