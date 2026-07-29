@@ -1,17 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboardService';
 
-export const useBuses = ({ page = 1, perPage = 10 } = {}) => {
+export const useBuses = ({ page = 1, perPage = 10, search = '' } = {}) => {
   return useQuery({
-    queryKey: ['buses', { page, perPage }],
-    queryFn: () => dashboardService.getBuses({ page, perPage }),
+    queryKey: ['buses', { page, perPage, search }],
+    queryFn: () => dashboardService.getBuses({ page, perPage, search }),
   });
 };
 
-export const usePendingMaintenance = ({ page = 1, perPage = 10 } = {}) => {
+export const usePendingMaintenance = ({ page = 1, perPage = 10, search = '' } = {}) => {
   return useQuery({
-    queryKey: ['maintenance', 'pending', { page, perPage }],
-    queryFn: () => dashboardService.getPendingMaintenance({ page, perPage }),
+    queryKey: ['maintenance', 'pending', { page, perPage, search }],
+    queryFn: () => dashboardService.getPendingMaintenance({ page, perPage, search }),
   });
 };
 

@@ -20,7 +20,7 @@ const FleetManagementPage = ({ user, onSignOut }) => {
   const { data: busesResponse, isLoading: isBusesLoading, error: busesError } = useBuses({ page: busPage, perPage: itemsPerPage });
   const rawBuses = busesResponse?.data ?? [];
   const busesMeta = busesResponse?.meta ?? {};
-  const { data: maintResponse, isLoading: isMaintLoading, error: maintError } = usePendingMaintenance({ page: maintPage, perPage: itemsPerPage });
+  const { data: maintResponse, isLoading: isMaintLoading, error: maintError } = usePendingMaintenance({ page: maintPage, perPage: itemsPerPage, search: debouncedSearch });
   const maintenanceData = maintResponse?.data ?? [];
   const maintMeta = maintResponse?.meta ?? {};
   
@@ -136,17 +136,7 @@ const FleetManagementPage = ({ user, onSignOut }) => {
     }
   };
 
-  // Search Logic (applies to Maintenance Queue)
-  const filteredRepairs = repairs.filter((r) => {
-    if (!debouncedSearch.trim()) return true;
-    const query = debouncedSearch.toLowerCase();
-    return (
-      r.id.toLowerCase().includes(query) ||
-      r.issue.toLowerCase().includes(query) ||
-      r.priority.toLowerCase().includes(query) ||
-      r.date.toLowerCase().includes(query)
-    );
-  });
+  const filteredRepairs = repairs;
 
   // Handle Log New Repair
   const validateForm = () => {

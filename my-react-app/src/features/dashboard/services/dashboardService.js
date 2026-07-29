@@ -145,8 +145,9 @@ export const dashboardService = {
   // ==========================================
   // 🚌 Fleet Infrastructure (PostgreSQL)
   // ==========================================
-  async getBuses({ page = 1, perPage = 10 } = {}) {
+  async getBuses({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
     const response = await fetch(`${API_URL}/buses?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -184,8 +185,9 @@ export const dashboardService = {
   // ==========================================
   // 🔧 Maintenance Operations (MongoDB + Hybrid)
   // ==========================================
-  async getPendingMaintenance({ page = 1, perPage = 10 } = {}) {
+  async getPendingMaintenance({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
     const response = await fetch(`${API_URL}/maintenance/pending?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -214,8 +216,9 @@ export const dashboardService = {
   // ==========================================
   // 🗺️ Route Logistics & Deployment
   // ==========================================
-  async getRoutes({ page = 1, perPage = 10 } = {}) {
+  async getRoutes({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
     const response = await fetch(`${API_URL}/routes?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -279,8 +282,9 @@ export const dashboardService = {
   // ==========================================
   // 💰 Billing & Finance Operations
   // ==========================================
-  async getFeeStructures({ page = 1, perPage = 10 } = {}) {
+  async getFeeStructures({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
     const response = await fetch(`${API_URL}/billing/fee-structures?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -315,8 +319,9 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
-  async getInvoices({ page = 1, perPage = 10 } = {}) {
+  async getInvoices({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
+    if (search) params.set('search', search);
     const response = await fetch(`${API_URL}/billing/invoices?${params}`, {
       method: 'GET',
       headers: getHeaders(),

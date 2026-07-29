@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboardService';
 
-export const useFeeStructures = ({ page = 1, perPage = 10 } = {}) => {
+export const useFeeStructures = ({ page = 1, perPage = 10, search = '' } = {}) => {
   return useQuery({
-    queryKey: ['feeStructures', { page, perPage }],
-    queryFn: () => dashboardService.getFeeStructures({ page, perPage }),
+    queryKey: ['feeStructures', { page, perPage, search }],
+    queryFn: () => dashboardService.getFeeStructures({ page, perPage, search }),
   });
 };
 
@@ -40,10 +40,10 @@ export const useAssignFeeStructure = () => {
   });
 };
 
-export const useInvoices = ({ page = 1, perPage = 10 } = {}) => {
+export const useInvoices = ({ page = 1, perPage = 10, search = '' } = {}) => {
   return useQuery({
-    queryKey: ['invoices', { page, perPage }],
-    queryFn: () => dashboardService.getInvoices({ page, perPage }),
+    queryKey: ['invoices', { page, perPage, search }],
+    queryFn: () => dashboardService.getInvoices({ page, perPage, search }),
   });
 };
 

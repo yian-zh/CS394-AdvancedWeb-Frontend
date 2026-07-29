@@ -17,7 +17,7 @@ import '../styles/dashboard.css';
 const UserManagementPage = ({ user, onSignOut }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  const { data: usersResponse, isLoading, error } = useUsers({ page: currentPage, perPage: itemsPerPage });
+  const { data: usersResponse, isLoading, error } = useUsers({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawUsers = usersResponse?.data ?? [];
   const paginationMeta = usersResponse?.meta ?? {};
   const createUserMutation = useCreateUser();
@@ -91,23 +91,12 @@ const UserManagementPage = ({ user, onSignOut }) => {
     }
   };
 
-  // Search & Filter Logic
+  // Role Filter (search is handled server-side)
   const filteredUsers = users.filter((u) => {
-    // 1. Role Filter
     if (activeTab === 'Drivers' && u.role !== 'Driver') return false;
     if (activeTab === 'Guardians' && u.role !== 'Guardian') return false;
     if (activeTab === 'Administrators' && u.role !== 'Administrator') return false;
-
-    // 2. Text Search
-    if (!debouncedSearch.trim()) return true;
-    const query = debouncedSearch.toLowerCase();
-    return (
-      u.name.toLowerCase().includes(query) ||
-      u.id.toLowerCase().includes(query) ||
-      u.email.toLowerCase().includes(query) ||
-      u.phone.includes(query) ||
-      u.assignment.toLowerCase().includes(query)
-    );
+    return true;
   });
 
   const openAddModal = () => {

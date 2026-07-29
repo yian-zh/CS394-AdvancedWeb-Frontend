@@ -66,7 +66,7 @@ function isTimeOverlapping(window1, window2) {
 const RouteLogisticsPage = ({ user, onSignOut }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
-  const { data: routesResponse, isLoading, error } = useRoutes({ page: currentPage, perPage: itemsPerPage });
+  const { data: routesResponse, isLoading, error } = useRoutes({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawRoutes = routesResponse?.data ?? [];
   const routesMeta = routesResponse?.meta ?? {};
   const { data: busesResponse } = useBuses({ perPage: 200 });
@@ -320,18 +320,11 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
       .toUpperCase();
   };
 
-  // Filter routes based on search and status tabs
+  // Filter routes based on status tab (search is handled server-side)
   const filteredRoutes = routes.filter(r => {
-    const q = debouncedSearch.toLowerCase();
-    const matchesSearch = !q ||
-      r.name.toLowerCase().includes(q) || 
-      r.driver.toLowerCase().includes(q) ||
-      r.busId.toLowerCase().includes(q);
-    
     const matchesStatus = statusFilter === 'All' || 
                           r.status.toLowerCase() === statusFilter.toLowerCase();
-
-    return matchesSearch && matchesStatus;
+    return matchesStatus;
   });
 
   return (

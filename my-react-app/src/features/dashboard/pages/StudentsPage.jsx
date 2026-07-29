@@ -26,7 +26,7 @@ const BASE_STATS = {
 const StudentsPage = ({ user, onSignOut }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
-  const { data: studentsResponse, isLoading, error } = useStudents({ page: currentPage, perPage: itemsPerPage });
+  const { data: studentsResponse, isLoading, error } = useStudents({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawStudents = studentsResponse?.data ?? [];
   const studentsMeta = studentsResponse?.meta ?? {};
   const { data: routesResponse } = useRoutes({ perPage: 200 });
@@ -182,22 +182,14 @@ const StudentsPage = ({ user, onSignOut }) => {
     };
   }, [rawStudents, studentsMeta]);
 
-  // Search & Filter logic
+  // Grade & Route filter (applied to server-side search results)
   const filteredStudents = useMemo(() => {
-    const q = debouncedSearch.toLowerCase();
     return students.filter((s) => {
-      const matchesSearch = 
-        !q ||
-        s.name.toLowerCase().includes(q) ||
-        s.id.toLowerCase().includes(q) ||
-        s.guardianName.toLowerCase().includes(q);
-        
       const matchesGrade = gradeFilter === 'All' || s.grade === gradeFilter;
       const matchesRoute = routeFilter === 'All' || s.assignedRoute === routeFilter;
-
-      return matchesSearch && matchesGrade && matchesRoute;
+      return matchesGrade && matchesRoute;
     });
-  }, [students, debouncedSearch, gradeFilter, routeFilter]);
+  }, [students, gradeFilter, routeFilter]);
 
   // Modal Openers
   const openAddModal = () => {

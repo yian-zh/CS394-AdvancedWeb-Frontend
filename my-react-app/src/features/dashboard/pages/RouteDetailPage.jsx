@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
@@ -9,6 +9,8 @@ import {
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
+import AsyncSelect from '../../../components/ui/AsyncSelect';
+import { dashboardService } from '../services/dashboardService';
 import { useRoutes, useManageStops, useUpdateRoute, useDeleteRoute, useAssignBusToRoute } from '../hooks/useRoutes';
 import { useStudents, useCreateStudent } from '../hooks/useStudents';
 import { useBuses } from '../hooks/useFleet';
@@ -338,33 +340,21 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     setIsRouteRenameModalOpen(false);
   };
 
-  // Student directory search & selection states
-  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  // Student selection state
   const [selectedStudentObj, setSelectedStudentObj] = useState(null);
 
-  const studentDirectory = useMemo(() => {
-    if (rawStudents && rawStudents.length > 0) {
-      return rawStudents.map(s => {
-        const fullName = `${s.first_name || ''} ${s.last_name || ''}`.trim() || `Student #${s.student_id}`;
-        return {
-          id: String(s.student_id),
-          student_id: s.student_id,
-          name: fullName,
-          grade: s.grade_level || 'Student',
-          avatar: getInitials(fullName)
-        };
-      });
-    }
-    return [];
-  }, [rawStudents]);
-
-  const filteredStudents = useMemo(() => {
-    if (!studentSearchTerm.trim()) return studentDirectory;
-    const term = studentSearchTerm.toLowerCase();
-    return studentDirectory.filter(s => 
-      s.name.toLowerCase().includes(term) || s.grade.toLowerCase().includes(term)
-    );
-  }, [studentDirectory, studentSearchTerm]);
+  const fetchStudents = useCallback(async (search) => {
+    const data = await dashboardService.getStudents({ search, perPage: 20 });
+    return (data?.data ?? []).map(s => ({
+      id: String(s.student_id),
+      student_id: s.student_id,
+      name: `${s.first_name || ''} ${s.last_name || ''}`.trim() || `Student #${s.student_id}`,
+      label: `${s.first_name || ''} ${s.last_name || ''}`.trim() || `Student #${s.student_id}`,
+      grade: s.grade_level || 'Student',
+      sub: s.grade_level || '',
+      avatar: getInitials(`${s.first_name || ''} ${s.last_name || ''}`.trim() || `Student #${s.student_id}`),
+    }));
+  }, []);
 
   const isLoading = isQueryLoading && stops.length === 0;
   const error = queryError ? queryError.message : null;
@@ -974,7 +964,6 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
 
     await syncStopsWithBackend(updatedStops);
 
-    setStudentSearchTerm('');
     setSelectedStudentObj(null);
     setSelectedStudentStopId('');
     setIsStudentModalOpen(false);
@@ -1055,79 +1044,18 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     return currentRoute.mapUrl;
   };
 
-  const availableDrivers = useMemo(() => {
-    const currentRouteTime = '07:00 AM - 08:30 AM';
-    const currentNumericRouteId = routeId ? parseInt(String(routeId).replace('route-', ''), 10) : null;
-
-    if (rawUsers && rawUsers.length > 0) {
-      const drivers = rawUsers.filter(u => {
-        const role = (u.role || '').toLowerCase();
-        return role === 'driver' || role === 'admin';
-      });
-
-      const listToUse = drivers.length > 0 ? drivers : rawUsers;
-
-      return listToUse.map(u => {
-        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || `User #${u.user_id}`;
-        const initials = getInitials(fullName);
-
-        // Detect if driver is already assigned to a different route with an overlapping schedule
-        const conflictingRoute = rawRoutes.find(r => {
-          const rNumId = r.route_id;
-          if (currentNumericRouteId && String(rNumId) === String(currentNumericRouteId)) return false;
-          if (String(r.route_id) === String(routeId) || `route-${r.route_id}` === routeId) return false;
-
-          const isAssignedToOtherRoute = 
-            String(r.driver_id) === String(u.user_id) || 
-            (r.driver && String(r.driver.user_id) === String(u.user_id));
-
-          if (!isAssignedToOtherRoute) return false;
-
-          const otherRouteTime = '07:00 AM - 08:30 AM';
-          return isTimeOverlapping(currentRouteTime, otherRouteTime);
-        });
-
-        let status = u.status === false ? 'On Leave' : 'Available';
-        let isOverlapping = false;
-        let conflictInfo = null;
-
-        if (conflictingRoute) {
-          isOverlapping = true;
-          status = 'Schedule Conflict';
-          conflictInfo = `Assigned to ${conflictingRoute.route_name || 'Route #' + conflictingRoute.route_id}`;
-        }
-
-        return {
-          id: String(u.user_id),
-          user_id: u.user_id,
-          name: fullName,
-          number: `#${u.user_id}`,
-          license: u.phone_number ? `Contact: ${u.phone_number}` : `Driver ID: ${u.user_id}`,
-          expiry: u.email || 'N/A',
-          status,
-          isOverlapping,
-          conflictInfo,
-          avatar: initials,
-          rawUserObj: u
-        };
-      });
-    }
-    return [];
-  }, [rawUsers, rawRoutes, routeId]);
-
-  const filteredDrivers = useMemo(() => {
-    let list = availableDrivers;
-    if (activeDriver && activeDriver !== 'Unassigned') {
-      list = list.filter(d => d.name.toLowerCase() !== activeDriver.toLowerCase() && String(d.user_id) !== String(assigningDriverId));
-    }
-    if (!driverSearch.trim()) return list;
-    const term = driverSearch.toLowerCase();
-    return list.filter(d =>
-      d.name.toLowerCase().includes(term) ||
-      d.number.toLowerCase().includes(term) ||
-      d.license.toLowerCase().includes(term)
-    );
-  }, [availableDrivers, driverSearch, activeDriver, assigningDriverId]);
+  const fetchDrivers = useCallback(async (search) => {
+    const data = await dashboardService.getUsers({ search, perPage: 20 });
+    return (data?.data ?? []).map(u => ({
+      id: u.user_id,
+      user_id: u.user_id,
+      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+      label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
+      sub: u.phone_number ? `Contact: ${u.phone_number}` : `ID: ${u.user_id}`,
+      first_name: u.first_name,
+      last_name: u.last_name,
+    }));
+  }, []);
 
   return (
     <div className="dashboard-layout">
@@ -1872,126 +1800,51 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
             </div>
 
             <div className="modal-body" style={{ padding: '20px' }}>
-              <div className="top-navbar-search" style={{ width: '100%', marginBottom: '12px', border: '1px solid rgba(197, 197, 211, 0.4)' }}>
-                <Search size={16} className="search-icon" />
-                <input 
-                  type="text" 
-                  placeholder="Search by driver name or ID..."
-                  value={driverSearch}
-                  onChange={(e) => setDriverSearch(e.target.value)}
-                  style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '8px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
-                {activeDriver && activeDriver !== 'Unassigned' && (
-                  <div
-                    onClick={() => assigningDriverId === null && handleRemoveDriver()}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      border: '1px dashed #ef4444',
-                      borderRadius: '8px',
-                      cursor: assigningDriverId !== null ? 'not-allowed' : 'pointer',
-                      backgroundColor: '#fef2f2',
-                      marginBottom: '4px',
-                      transition: 'all 0.2s',
-                      pointerEvents: assigningDriverId !== null ? 'none' : 'auto'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#dc2626' }}>
-                      <UserX size={16} />
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 700 }}>Unassign Current Driver</span>
-                        <span style={{ fontSize: '11px', opacity: 0.8 }}>Currently: {activeDriver}</span>
-                      </div>
+              {activeDriver && activeDriver !== 'Unassigned' && (
+                <div
+                  onClick={() => assigningDriverId === null && handleRemoveDriver()}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 12px',
+                    border: '1px dashed #ef4444',
+                    borderRadius: '8px',
+                    cursor: assigningDriverId !== null ? 'not-allowed' : 'pointer',
+                    backgroundColor: '#fef2f2',
+                    marginBottom: '16px',
+                    transition: 'all 0.2s',
+                    pointerEvents: assigningDriverId !== null ? 'none' : 'auto'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#dc2626' }}>
+                    <UserX size={16} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700 }}>Unassign Current Driver</span>
+                      <span style={{ fontSize: '11px', opacity: 0.8 }}>Currently: {activeDriver}</span>
                     </div>
-                    {assigningDriverId === 'remove' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#dc2626' }}>
-                        <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} />
-                        Removing...
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: '#dc2626', backgroundColor: '#ffffff', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
-                        Remove Driver
-                      </span>
-                    )}
                   </div>
-                )}
-                <span className="modal-section-title" style={{ margin: '0 0 4px 0' }}>AVAILABLE DRIVERS</span>
-                {filteredDrivers.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center', color: 'var(--icon-color)', fontSize: '13px' }}>
-                    {rawUsers.length === 0 ? 'No drivers registered in the system.' : 'No drivers matching search.'}
-                  </div>
-                ) : (
-                  filteredDrivers.map(d => {
-                    const isAssigning = String(assigningDriverId) === String(d.id) || String(assigningDriverId) === String(d.user_id);
-                    const isDisabled = d.status === 'On Leave' || d.isOverlapping || assigningDriverId !== null;
-
-                    const getStatusClass = (status) => {
-                      switch(status.toLowerCase()) {
-                        case 'available': return 'driver-badge-available';
-                        case 'assigned': return 'driver-badge-assigned';
-                        case 'on leave': return 'driver-badge-leave';
-                        case 'schedule conflict': return 'driver-badge-leave';
-                        default: return 'driver-badge-available';
-                      }
-                    };
-
-                    return (
-                      <div 
-                        key={d.id}
-                        onClick={() => !isDisabled && handleAssignDriver(d)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '12px',
-                          border: isAssigning ? '1px solid var(--primary-brand)' : '1px solid rgba(197, 197, 211, 0.2)',
-                          borderRadius: '8px',
-                          cursor: isDisabled ? 'not-allowed' : 'pointer',
-                          opacity: (d.status === 'On Leave' || d.isOverlapping || (assigningDriverId !== null && !isAssigning)) ? 0.5 : 1,
-                          backgroundColor: isAssigning ? 'rgba(0, 35, 111, 0.04)' : '#ffffff',
-                          transition: 'all 0.2s',
-                          pointerEvents: isDisabled ? 'none' : 'auto'
-                        }}
-                        className="driver-row-hover"
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(0, 35, 111, 0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 600, color: 'var(--primary-brand)' }}>
-                            {d.avatar}
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-dark)' }}>{d.name}</span>
-                            <span style={{ fontSize: '11px', color: 'var(--icon-color)' }}>ID: {d.number} • {d.license}</span>
-                            {d.isOverlapping && d.conflictInfo && (
-                              <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: 600, marginTop: '2px' }}>
-                                ⚠️ Schedule conflict: {d.conflictInfo}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {isAssigning ? (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--primary-brand)' }}>
-                            <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} />
-                            Assigning...
-                          </span>
-                        ) : (
-                          <span 
-                            className={`driver-status-badge ${getStatusClass(d.status)}`}
-                            style={d.isOverlapping ? { backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' } : {}}
-                          >
-                            {d.status}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+                  {assigningDriverId === 'remove' ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: '#dc2626' }}>
+                      <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} />
+                      Removing...
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#dc2626', backgroundColor: '#ffffff', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fca5a5' }}>
+                      Remove Driver
+                    </span>
+                  )}
+                </div>
+              )}
+              <AsyncSelect
+                label="Search & Select Driver"
+                placeholder="Type driver name..."
+                fetchOptions={fetchDrivers}
+                value={activeDriver}
+                onChange={(opt) => opt && handleAssignDriver(opt)}
+                getOptionLabel={(opt) => opt.label}
+                getOptionValue={(opt) => opt.id}
+              />
             </div>
             
             <div className="modal-footer">
@@ -2171,7 +2024,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                 onClick={() => {
                   setIsStudentModalOpen(false);
                   setSelectedStudentObj(null);
-                  setStudentSearchTerm('');
+                  /* removed */;
                 }}
               >
                 <X size={16} />
@@ -2201,89 +2054,18 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                   </select>
                 </div>
 
-                {/* Searchable Student Dropdown Picker */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-dark)' }}>
-                      Select Student ({isStudentsLoading ? 'Loading API...' : `${filteredStudents.length} available`})
-                    </label>
-                    {selectedStudentObj && (
-                      <span style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>
-                        ✓ {selectedStudentObj.name} Selected
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Live Search Input */}
-                  <Input 
-                    type="text" 
-                    icon={<Search size={14} />}
-                    placeholder="Search student by name or grade level..."
-                    value={studentSearchTerm}
-                    onChange={(e) => setStudentSearchTerm(e.target.value)}
-                  />
-
-                  {/* Scrollable Student Selection List */}
-                  <div 
-                    style={{
-                      maxHeight: '180px',
-                      overflowY: 'auto',
-                      border: '1px solid rgba(197, 197, 211, 0.4)',
-                      borderRadius: '8px',
-                      backgroundColor: '#ffffff',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      marginTop: '4px'
-                    }}
-                  >
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map((st) => {
-                        const isSelected = selectedStudentObj && selectedStudentObj.id === st.id;
-                        return (
-                          <div
-                            key={st.id}
-                            onClick={() => {
-                              setSelectedStudentObj(st);
-                              setNewStudentName(st.name);
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '8px 12px',
-                              borderBottom: '1px solid rgba(197, 197, 211, 0.15)',
-                              cursor: 'pointer',
-                              backgroundColor: isSelected ? 'rgba(0, 35, 111, 0.06)' : 'transparent',
-                              transition: 'all 0.15s'
-                            }}
-                            onMouseEnter={(e) => !isSelected && (e.currentTarget.style.backgroundColor = '#f8fafc')}
-                            onMouseLeave={(e) => !isSelected && (e.currentTarget.style.backgroundColor = 'transparent')}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <span style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: 'var(--primary-brand)', color: '#ffffff', fontSize: '10px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {st.avatar}
-                              </span>
-                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-dark)' }}>{st.name}</span>
-                                <span style={{ fontSize: '11px', color: 'var(--icon-color)' }}>{st.grade}</span>
-                              </div>
-                            </div>
-
-                            {isSelected ? (
-                              <Check size={16} style={{ color: 'var(--primary-brand)' }} />
-                            ) : (
-                              <span style={{ fontSize: '11px', color: 'var(--primary-brand)', fontWeight: 600 }}>Select</span>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '12px' }}>
-                        No matching students found for "{studentSearchTerm}"
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <AsyncSelect
+                  label={`Select Student ${selectedStudentObj ? `— ✓ ${selectedStudentObj.name} Selected` : ''}`}
+                  placeholder="Type student name..."
+                  fetchOptions={fetchStudents}
+                  value={selectedStudentObj}
+                  onChange={(opt) => {
+                    setSelectedStudentObj(opt);
+                    setNewStudentName(opt?.name || '');
+                  }}
+                  getOptionLabel={(opt) => opt.label || opt.name}
+                  getOptionValue={(opt) => opt.id}
+                />
 
               </div>
             </div>
@@ -2296,7 +2078,7 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                 onClick={() => {
                   setIsStudentModalOpen(false);
                   setSelectedStudentObj(null);
-                  setStudentSearchTerm('');
+                  /* removed */;
                 }}
               >
                 Cancel

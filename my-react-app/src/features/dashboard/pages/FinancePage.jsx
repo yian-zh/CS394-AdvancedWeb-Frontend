@@ -27,7 +27,7 @@ const FinancePage = ({ user, onSignOut }) => {
   const { data: feeResponse, isLoading: isFeesLoading } = useFeeStructures({ page: feePage, perPage: feesPerPage });
   const rawFeeStructures = feeResponse?.data ?? [];
   const feeMeta = feeResponse?.meta ?? {};
-  const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage });
+  const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage, search: debouncedSearch });
   const rawInvoices = invoiceResponse?.data ?? [];
   const invoiceMeta = invoiceResponse?.meta ?? {};
   const [studentFeePage, setStudentFeePage] = useState(1);
@@ -205,18 +205,13 @@ const FinancePage = ({ user, onSignOut }) => {
     return [];
   }, [rawInvoices, rawStudents, feeStructures, assignedStudentFees]);
 
-  // Filtered Ledger
+  // Filtered Ledger (by status only; search is handled server-side)
   const filteredLedger = useMemo(() => {
-    const q = debouncedSearch.toLowerCase();
     return ledger.filter((item) => {
-      const matchesSearch = !q ||
-        item.invoice_id.toLowerCase().includes(q) ||
-        item.payer.toLowerCase().includes(q) ||
-        item.fee_tier.toLowerCase().includes(q);
       const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      return matchesStatus;
     });
-  }, [ledger, debouncedSearch, statusFilter]);
+  }, [ledger, statusFilter]);
 
   // Handlers
   const handleCreateFeeSubmit = async (e) => {
