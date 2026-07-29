@@ -26,6 +26,11 @@ const BASE_STATS = {
 const StudentsPage = ({ user, onSignOut }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+
+  // Search state (must be before hooks that use debouncedSearch)
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
   const { data: studentsResponse, isLoading, error } = useStudents({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawStudents = studentsResponse?.data ?? [];
   const studentsMeta = studentsResponse?.meta ?? {};
@@ -35,10 +40,6 @@ const StudentsPage = ({ user, onSignOut }) => {
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
-
-  // Search & Filter state
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearch = useDebounce(searchQuery, 300);
   const [gradeFilter, setGradeFilter] = useState('All');
   const [routeFilter, setRouteFilter] = useState('All');
   

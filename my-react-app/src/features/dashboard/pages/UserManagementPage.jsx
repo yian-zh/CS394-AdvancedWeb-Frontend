@@ -17,15 +17,16 @@ import '../styles/dashboard.css';
 const UserManagementPage = ({ user, onSignOut }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
   const { data: usersResponse, isLoading, error } = useUsers({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawUsers = usersResponse?.data ?? [];
   const paginationMeta = usersResponse?.meta ?? {};
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearch = useDebounce(searchQuery, 300);
   const [activeTab, setActiveTab] = useState('All Users');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'

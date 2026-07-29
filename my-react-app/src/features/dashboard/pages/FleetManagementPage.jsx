@@ -17,6 +17,10 @@ const FleetManagementPage = ({ user, onSignOut }) => {
   const [busPage, setBusPage] = useState(1);
   const [maintPage, setMaintPage] = useState(1);
   const itemsPerPage = 10;
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
   const { data: busesResponse, isLoading: isBusesLoading, error: busesError } = useBuses({ page: busPage, perPage: itemsPerPage });
   const rawBuses = busesResponse?.data ?? [];
   const busesMeta = busesResponse?.meta ?? {};
@@ -30,9 +34,6 @@ const FleetManagementPage = ({ user, onSignOut }) => {
 
   const isLoading = isBusesLoading || isMaintLoading;
   const error = busesError ? (busesError.message || String(busesError)) : (maintError ? (maintError.message || String(maintError)) : null);
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearch = useDebounce(searchQuery, 300);
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);

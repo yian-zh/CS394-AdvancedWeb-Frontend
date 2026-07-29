@@ -66,6 +66,10 @@ function isTimeOverlapping(window1, window2) {
 const RouteLogisticsPage = ({ user, onSignOut }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
   const { data: routesResponse, isLoading, error } = useRoutes({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawRoutes = routesResponse?.data ?? [];
   const routesMeta = routesResponse?.meta ?? {};
@@ -74,9 +78,6 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const createRouteMutation = useCreateRoute();
   const updateRouteMutation = useUpdateRoute();
   const deleteRouteMutation = useDeleteRoute();
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter, setStatusFilter] = useState('All'); // All | Active | Delayed
   
   // Modals state

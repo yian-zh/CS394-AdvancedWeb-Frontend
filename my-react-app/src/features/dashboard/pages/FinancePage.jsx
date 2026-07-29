@@ -24,6 +24,11 @@ const FinancePage = ({ user, onSignOut }) => {
   const [invoicePage, setInvoicePage] = useState(1);
   const feesPerPage = 10;
   const invoicesPerPage = 5;
+
+  // Search state (must be before hooks that use debouncedSearch)
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
+
   const { data: feeResponse, isLoading: isFeesLoading } = useFeeStructures({ page: feePage, perPage: feesPerPage });
   const rawFeeStructures = feeResponse?.data ?? [];
   const feeMeta = feeResponse?.meta ?? {};
@@ -75,10 +80,6 @@ const FinancePage = ({ user, onSignOut }) => {
       });
     }
   };
-
-  // Search & Filter state
-  const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter, setStatusFilter] = useState('All');
 
   // Modals state
