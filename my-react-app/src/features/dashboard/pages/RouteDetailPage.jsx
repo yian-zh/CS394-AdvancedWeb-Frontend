@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
@@ -71,71 +71,11 @@ const PHNOM_PENH_PIN_PRESETS = [
   { id: 'custom-pin', name: '📍 Custom Pin Coordinates', address: 'Specify manual Lat & Lng', lat: '', lng: '', category: 'Custom' }
 ];
 
-const ROUTE_DETAILS = {
-  'route-1': {
-    name: 'Route 1 - Phnom Penh Central',
-    busId: '#402-A',
-    driver: 'Sarah Jenkins',
-    capacityUsed: 7,
-    capacityTotal: 60,
-    stops: [
-      { id: 1, name: 'Wat Phnom', address: 'Preah Norodom Blvd', type: 'stop', lat: 11.5760835, lng: 104.9230554, pinCategory: 'Landmark', students: [{ id: 's1', name: 'Lucas Vance', grade: 'Grade 3', avatar: 'LV' }, { id: 's2', name: 'Sophia Chen', grade: 'Grade 5', avatar: 'SC' }] },
-      { id: 2, name: 'Central Market (Phsar Thmey)', address: 'Calmette St', type: 'stop', lat: 11.5695535, lng: 104.9210271, pinCategory: 'Market', students: [{ id: 's3', name: 'Ethan Miller', grade: 'Grade 2', avatar: 'EM' }] },
-      { id: 3, name: 'Independence Monument', address: 'Sihanouk Blvd', type: 'stop', lat: 11.556278, lng: 104.928222, pinCategory: 'Landmark', students: [{ id: 's4', name: 'Chloe Sterling', grade: 'Grade 4', avatar: 'CS' }, { id: 's5', name: 'Oliver Jenkins', grade: 'Grade 1', avatar: 'OJ' }] },
-      { id: 4, name: 'Diamond Island (Koh Pich)', address: 'Tonle Bassac', type: 'stop', lat: 11.551800, lng: 104.939800, pinCategory: 'District', students: [{ id: 's6', name: 'Emma Watson', grade: 'Grade 6', avatar: 'EW' }] },
-      { id: 5, name: 'Aeon Mall Phnom Penh', address: 'Sothearos Blvd', type: 'stop', lat: 11.547514, lng: 104.935100, pinCategory: 'Shopping', students: [{ id: 's7', name: 'Liam Vance', grade: 'Grade 3', avatar: 'LV' }] },
-      { id: 6, name: 'Royal University of Phnom Penh', address: 'Russian Blvd', type: 'arrival', lat: 11.568321, lng: 104.890694, pinCategory: 'Education', students: [] }
-    ],
-    mapUrl: 'https://www.google.com/maps/embed?pb=!1m28!1m12!1m3!1d31271.21157297371!2d104.897258!3d11.558778!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!4m13!3e0!4m5!1s0x310951448b111165%3A0x6442654c60205842!2sWat+Phnom%2C+Phnom+Penh!3m2!1d11.5760835!2d104.9230554!4m5!1s0x3109513e9a7e6b7b%3A0xe54e6012e8fb7a3!2sCentral+Market%2C+Phnom+Penh!3m2!1d11.5695535!2d104.9210271!5e0!3m2!1sen!2s!4v1719914375000!5m2!1sen!2s'
-  },
-  'route-12': {
-    name: 'Route 12 - South District',
-    busId: '#108',
-    driver: 'Elena Rodriguez',
-    capacityUsed: 3,
-    capacityTotal: 52,
-    stops: [
-      { id: 1, name: 'Tuol Sleng Genocide Museum', address: 'St 113, Phnom Penh', type: 'stop', lat: 11.542289, lng: 104.908076, pinCategory: 'Museum', students: [{ id: 's8', name: 'Noah Rodriguez', grade: 'Grade 4', avatar: 'NR' }] },
-      { id: 2, name: 'Russian Market', address: 'St 163, Phnom Penh', type: 'stop', lat: 11.540700, lng: 104.914500, pinCategory: 'Market', students: [{ id: 's9', name: 'Mia Vance', grade: 'Grade 2', avatar: 'MV' }] },
-      { id: 3, name: 'Aeon Mall Mean Chey', address: 'Hun Sen Blvd, Phnom Penh', type: 'stop', lat: 11.498100, lng: 104.925200, pinCategory: 'Shopping', students: [{ id: 's10', name: 'Aiden Chen', grade: 'Grade 5', avatar: 'AC' }] },
-      { id: 4, name: 'ISPP - International School', address: 'Hun Sen Blvd, Phnom Penh', type: 'arrival', lat: 11.512300, lng: 104.926500, pinCategory: 'Education', students: [] }
-    ],
-    mapUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15636.568478440078!2d104.9080765!3d11.54228945!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3109513cd77ff535%3A0x89eeebec3a42eb2!2sTuol%20Sleng%20Genocide%20Museum!5e0!3m2!1sen!2skh!4v1719914400000!5m2!1sen!2skh'
-  },
-  'route-31': {
-    name: 'Route 31 - Central Special Ed',
-    busId: '#S-14',
-    driver: 'David Vance',
-    capacityUsed: 2,
-    capacityTotal: 15,
-    stops: [
-      { id: 1, name: 'Wat Phnom', address: 'Preah Norodom Blvd', type: 'stop', lat: 11.5760835, lng: 104.9230554, pinCategory: 'Landmark', students: [{ id: 's11', name: 'Benjamin Vance', grade: 'Grade 1', avatar: 'BV' }] },
-      { id: 2, name: 'National Museum of Cambodia', address: 'Preah Ang Eng St', type: 'stop', lat: 11.5682919, lng: 104.9257252, pinCategory: 'Museum', students: [{ id: 's12', name: 'Charlotte Chen', grade: 'Grade 3', avatar: 'CC' }] },
-      { id: 3, name: 'Royal University of Fine Arts', address: 'St 19, Phnom Penh', type: 'arrival', lat: 11.569100, lng: 104.926100, pinCategory: 'Education', students: [] }
-    ],
-    mapUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3908.7706603126786!2d104.9257252!3d11.5682919!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31095138e6ff3e3b%3A0xa64aa27d2c70da0!2sNational%20Museum%20of%20Cambodia!5e0!3m2!1sen!2skh!4v1719914500000!5m2!1sen!2skh'
-  },
-  'route-42': {
-    name: 'Route 42 - North Campus',
-    busId: '#402',
-    driver: 'Marcus Sterling',
-    capacityUsed: 2,
-    capacityTotal: 45,
-    stops: [
-      { id: 1, name: 'Phnom Penh International Airport', address: 'Russian Blvd', type: 'stop', lat: 11.546555, lng: 104.844111, pinCategory: 'Transport', students: [{ id: 's13', name: 'Henry Sterling', grade: 'Grade 5', avatar: 'HS' }] },
-      { id: 2, name: 'Royal University of Phnom Penh', address: 'Russian Blvd', type: 'stop', lat: 11.568321, lng: 104.890694, pinCategory: 'Education', students: [{ id: 's14', name: 'Amelia Miller', grade: 'Grade 4', avatar: 'AM' }] },
-      { id: 3, name: 'Institute of Technology of Cambodia', address: 'Russian Blvd', type: 'arrival', lat: 11.570100, lng: 104.897000, pinCategory: 'Education', students: [] }
-    ],
-    mapUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3908.68307481285!2d104.887258!3d11.574678!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3109519fe4055555%3A0x2fca62d64024220!2sPhnom%20Penh%20International%20Airport!5e0!3m2!1sen!2skh!4v1719914600000!5m2!1sen!2skh'
-  }
-};
-
 const INITIAL_DRIVERS = [];
 
 const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const { routeId } = useParams();
   const navigate = useNavigate();
-  const currentRoute = ROUTE_DETAILS[routeId] || ROUTE_DETAILS['route-1'];
 
   const { data: routesResponse, isLoading: isQueryLoading, error: queryError } = useRoutes({ perPage: 200 });
   const rawRoutes = routesResponse?.data ?? [];
@@ -280,10 +220,6 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
       return matchedRoute.route_name;
     }
 
-    if (ROUTE_DETAILS[routeId] && ROUTE_DETAILS[routeId].name) {
-      return ROUTE_DETAILS[routeId].name;
-    }
-
     const cleanId = String(routeId).replace('route-', '');
     return `Route ${cleanId}`;
   }, [routeNameOverride, routeId, matchedRoute]);
@@ -321,10 +257,6 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
     const newName = renameInputValue.trim();
     setRouteNameOverride(newName);
 
-    if (ROUTE_DETAILS[routeId]) {
-      ROUTE_DETAILS[routeId].name = newName;
-    }
-
     const numericRouteId = routeId ? parseInt(routeId.replace('route-', ''), 10) : null;
     if (numericRouteId && !isNaN(numericRouteId)) {
       try {
@@ -359,11 +291,19 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
   const isLoading = isQueryLoading && stops.length === 0;
   const error = queryError ? queryError.message : null;
 
+  const syncedKeyRef = useRef('');
+
   // Sync details state with routeId param changes
   useEffect(() => {
-    if (rawRoutes.length > 0) {
-      const matched = rawRoutes.find(r => String(r.route_id) === routeId || `route-${r.route_id}` === routeId);
-      if (matched) {
+    if (isQueryLoading) return;
+
+    const matched = rawRoutes.find(r => String(r.route_id) === String(routeId) || `route-${r.route_id}` === String(routeId));
+    const syncKey = `${routeId}_${matched ? matched.route_id + '_' + (matched.updated_at || '') + '_' + (matched.students?.length || 0) : 'empty'}_${rawUsers.length}`;
+
+    if (syncedKeyRef.current === syncKey) return;
+    syncedKeyRef.current = syncKey;
+
+    if (matched) {
         const startStop = { 
           id: 'start', 
           name: matched.start_location, 
@@ -526,29 +466,19 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
           if (matched.buses[0].capacity) setCapacityTotal(matched.buses[0].capacity);
         } else if (matched.bus_number || matched.bus_id) {
           setActiveBus(`#${matched.bus_number || matched.bus_id}`);
-        } else if (currentRoute.busId) {
-          setActiveBus(currentRoute.busId);
         } else {
-          setActiveBus('#402-A');
+          setActiveBus('Unassigned');
         }
         setCapacityUsed(matched.students ? matched.students.length : 0);
       } else {
-        // Fallback to mock data if route not found in API list
-        setStops(currentRoute.stops);
-        setSelectedStopId(currentRoute.stops[0]?.id || 1);
-        setActiveDriver(currentRoute.driver);
-        setCapacityUsed(currentRoute.capacityUsed);
-        setCapacityTotal(currentRoute.capacityTotal);
+        setStops([]);
+        setSelectedStopId(null);
+        setActiveDriver('Unassigned');
+        setActiveBus('Unassigned');
+        setCapacityUsed(0);
+        setCapacityTotal(50);
       }
-    } else if (!isQueryLoading) {
-      // Fallback to mock data if query loaded but no backend records exist
-      setStops(currentRoute.stops);
-      setSelectedStopId(currentRoute.stops[0]?.id || 1);
-      setActiveDriver(currentRoute.driver);
-      setCapacityUsed(currentRoute.capacityUsed);
-      setCapacityTotal(currentRoute.capacityTotal);
-    }
-  }, [rawRoutes, isQueryLoading, routeId, currentRoute, rawUsers]);
+  }, [rawRoutes, isQueryLoading, routeId, rawUsers]);
 
   // Modals state
   const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
@@ -1041,21 +971,40 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
       }
       return `https://www.google.com/maps?q=${encodeURIComponent(selectedStop.name + ', Phnom Penh')}&z=16&output=embed`;
     }
-    return currentRoute.mapUrl;
+    return 'https://www.google.com/maps?q=11.5760835,104.9230554&z=14&output=embed';
   };
 
   const fetchDrivers = useCallback(async (search) => {
-    const data = await dashboardService.getUsers({ search, perPage: 20 });
-    return (data?.data ?? []).map(u => ({
-      id: u.user_id,
-      user_id: u.user_id,
-      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
-      label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
-      sub: u.phone_number ? `Contact: ${u.phone_number}` : `ID: ${u.user_id}`,
-      first_name: u.first_name,
-      last_name: u.last_name,
-    }));
-  }, []);
+    const data = await dashboardService.getUsers({ search, role: 'driver', perPage: 20 });
+    return (data?.data ?? []).map(u => {
+      const assignedRoute = rawRoutes.find(r => 
+        String(r.route_id) !== String(routeId) &&
+        (String(r.driver_id) === String(u.user_id) || String(r.driver_id) === String(u.id))
+      );
+
+      let isConflict = false;
+      let conflictInfo = '';
+
+      if (assignedRoute) {
+        isConflict = true;
+        conflictInfo = assignedRoute.route_name || `Route #${assignedRoute.route_id}`;
+      }
+
+      const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
+
+      return {
+        id: u.user_id,
+        user_id: u.user_id,
+        name: fullName,
+        label: fullName,
+        sub: isConflict ? `⚠️ Conflict: Assigned to ${conflictInfo}` : (u.phone_number ? `Contact: ${u.phone_number}` : `ID: ${u.user_id}`),
+        isConflict,
+        conflictInfo,
+        first_name: u.first_name,
+        last_name: u.last_name,
+      };
+    });
+  }, [rawRoutes, routeId]);
 
   return (
     <div className="dashboard-layout">
@@ -1845,9 +1794,30 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                 placeholder="Type driver name..."
                 fetchOptions={fetchDrivers}
                 value={activeDriver}
-                onChange={(opt) => opt && handleAssignDriver(opt)}
-                getOptionLabel={(opt) => opt.label}
-                getOptionValue={(opt) => opt.id}
+                onChange={(opt) => {
+                  if (!opt) return;
+                  if (opt.isConflict) {
+                    if (!window.confirm(`Warning: ${opt.name} is already assigned to ${opt.conflictInfo}. Do you still want to reassign this driver?`)) {
+                      return;
+                    }
+                  }
+                  handleAssignDriver(opt);
+                }}
+                getOptionLabel={(opt) => opt?.label || opt?.name || ''}
+                getOptionValue={(opt) => opt?.id ?? opt}
+                renderOption={(opt) => (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 600, color: opt.isConflict ? '#dc2626' : 'var(--text-dark)' }}>{opt.name}</span>
+                      {opt.isConflict && (
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: '#dc2626', backgroundColor: '#fee2e2', padding: '1px 6px', borderRadius: '4px' }}>
+                          ⚠️ Schedule Overlap
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '11px', color: opt.isConflict ? '#b91c1c' : '#64748b' }}>{opt.sub}</span>
+                  </div>
+                )}
               />
             </div>
             
@@ -2067,8 +2037,8 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
                     setSelectedStudentObj(opt);
                     setNewStudentName(opt?.name || '');
                   }}
-                  getOptionLabel={(opt) => opt.label || opt.name}
-                  getOptionValue={(opt) => opt.id}
+                  getOptionLabel={(opt) => opt?.label || opt?.name || ''}
+                  getOptionValue={(opt) => opt?.id ?? opt}
                 />
 
               </div>

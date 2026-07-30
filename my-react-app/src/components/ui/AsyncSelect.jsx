@@ -8,8 +8,8 @@ export default function AsyncSelect({
   fetchOptions,
   placeholder = 'Search...',
   label,
-  getOptionLabel = (opt) => opt.label || opt.name || String(opt.id),
-  getOptionValue = (opt) => opt.id,
+  getOptionLabel = (opt) => (opt ? opt.label || opt.name || String(opt.id ?? '') : ''),
+  getOptionValue = (opt) => (opt ? opt.id ?? opt.value ?? opt : ''),
   renderOption,
   error,
   disabled,
@@ -23,32 +23,52 @@ export default function AsyncSelect({
   const inputRef = useRef(null);
   const debouncedSearch = useDebounce(search, 300);
 
-  const selectedLabel = value ? (typeof value === 'string' ? value : getOptionLabel(value)) : '';
-
-  const doFetch = useCallback(async (term) => {
-    setLoading(true);
+  const safeGetLabel = useCallback((opt) => {
+    if (!opt) return '';
     try {
-      const results = await fetchOptions(term);
-      setOptions(results || []);
+      return getOptionLabel(opt) ?? '';
     } catch {
-      setOptions([]);
-    } finally {
-      setLoading(false);
-      setFetched(true);
+      return typeof opt === 'string' ? opt : (opt.name || opt.label || '');
     }
-  }, [fetchOptions]);
+  }, [getOptionLabel]);
+
+  const safeGetValue = useCallback((opt) => {
+    if (!opt) return '';
+    try {
+      return getOptionValue(opt) ?? '';
+    } catch {
+      return typeof opt === 'string' ? opt : (opt.id || opt.value || opt);
+    }
+  }, [getOptionValue]);
+
+  const selectedLabel = value ? (typeof value === 'string' ? value : safeGetLabel(value)) : '';
 
   useEffect(() => {
-    if (open && !fetched) {
-      doFetch('');
+    let isMounted = true;
+    if (open) {
+      const term = fetched ? debouncedSearch : '';
+      Promise.resolve().then(() => {
+        if (!isMounted) return;
+        setLoading(true);
+        fetchOptions(term)
+          .then((results) => {
+            if (isMounted) setOptions(results || []);
+          })
+          .catch(() => {
+            if (isMounted) setOptions([]);
+          })
+          .finally(() => {
+            if (isMounted) {
+              setLoading(false);
+              setFetched(true);
+            }
+          });
+      });
     }
-  }, [open, fetched, doFetch]);
-
-  useEffect(() => {
-    if (open && fetched) {
-      doFetch(debouncedSearch);
-    }
-  }, [debouncedSearch, open, doFetch]);
+    return () => {
+      isMounted = false;
+    };
+  }, [open, fetched, debouncedSearch, fetchOptions]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -134,33 +154,38 @@ export default function AsyncSelect({
               </div>
             )}
 
-            {options.map((opt) => (
-              <div
-                key={getOptionValue(opt)}
-                onClick={() => handleSelect(opt)}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  backgroundColor: getOptionValue(opt) === getOptionValue(value) ? 'rgba(0, 35, 111, 0.06)' : 'transparent',
-                  fontSize: '13px',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    getOptionValue(opt) === getOptionValue(value) ? 'rgba(0, 35, 111, 0.06)' : 'transparent';
-                }}
-              >
-                {renderOption ? (
-                  renderOption(opt)
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{getOptionLabel(opt)}</span>
-                    {opt.sub && <span style={{ fontSize: '11px', color: '#64748b' }}>{opt.sub}</span>}
-                  </div>
-                )}
-              </div>
-            ))}
+            {options.map((opt, idx) => {
+              const optVal = safeGetValue(opt);
+              const curVal = safeGetValue(value);
+              const isSelected = value && optVal && curVal ? optVal === curVal : false;
+
+              return (
+                <div
+                  key={optVal || idx}
+                  onClick={() => handleSelect(opt)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    backgroundColor: isSelected ? 'rgba(0, 35, 111, 0.06)' : 'transparent',
+                    fontSize: '13px',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = isSelected ? 'rgba(0, 35, 111, 0.06)' : 'transparent';
+                  }}
+                >
+                  {renderOption ? (
+                    renderOption(opt)
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--text-dark)' }}>{safeGetLabel(opt)}</span>
+                      {opt?.sub && <span style={{ fontSize: '11px', color: '#64748b' }}>{opt.sub}</span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
