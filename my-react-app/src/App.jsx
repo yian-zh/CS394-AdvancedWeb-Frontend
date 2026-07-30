@@ -5,15 +5,31 @@ import ProtectedRoute from './components/ProtectedRoute';
 import PageLoader from './components/ui/PageLoader';
 import { authService } from './features/auth/services/authService';
 
-const AuthPage = lazy(() => import('./features/auth/pages/AuthPage'));
-const StudentsPage = lazy(() => import('./features/dashboard/pages/StudentsPage'));
-const UserManagementPage = lazy(() => import('./features/dashboard/pages/UserManagementPage'));
-const FleetManagementPage = lazy(() => import('./features/dashboard/pages/FleetManagementPage'));
-const BusDetailPage = lazy(() => import('./features/dashboard/pages/BusDetailPage'));
-const RouteLogisticsPage = lazy(() => import('./features/dashboard/pages/RouteLogisticsPage'));
-const RouteDetailPage = lazy(() => import('./features/dashboard/pages/RouteDetailPage'));
-const FinancePage = lazy(() => import('./features/dashboard/pages/FinancePage'));
-const DatabaseTelemetryPage = lazy(() => import('./features/dashboard/pages/DatabaseTelemetryPage'));
+const lazyWithRetry = (componentImport) =>
+  lazy(async () => {
+    const pageHasBeenReloaded = sessionStorage.getItem('chunk_reload_attempted');
+    try {
+      const component = await componentImport();
+      sessionStorage.removeItem('chunk_reload_attempted');
+      return component;
+    } catch (error) {
+      if (!pageHasBeenReloaded) {
+        sessionStorage.setItem('chunk_reload_attempted', 'true');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+
+const AuthPage = lazyWithRetry(() => import('./features/auth/pages/AuthPage'));
+const StudentsPage = lazyWithRetry(() => import('./features/dashboard/pages/StudentsPage'));
+const UserManagementPage = lazyWithRetry(() => import('./features/dashboard/pages/UserManagementPage'));
+const FleetManagementPage = lazyWithRetry(() => import('./features/dashboard/pages/FleetManagementPage'));
+const BusDetailPage = lazyWithRetry(() => import('./features/dashboard/pages/BusDetailPage'));
+const RouteLogisticsPage = lazyWithRetry(() => import('./features/dashboard/pages/RouteLogisticsPage'));
+const RouteDetailPage = lazyWithRetry(() => import('./features/dashboard/pages/RouteDetailPage'));
+const FinancePage = lazyWithRetry(() => import('./features/dashboard/pages/FinancePage'));
+const DatabaseTelemetryPage = lazyWithRetry(() => import('./features/dashboard/pages/DatabaseTelemetryPage'));
 
 function App() {
   const [user, setUser] = useState(() => authService.getCurrentUser());
