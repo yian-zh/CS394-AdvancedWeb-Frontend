@@ -30,6 +30,7 @@ export const useCreateStudent = () => {
     mutationFn: dashboardService.createStudent,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 };
@@ -40,6 +41,7 @@ export const useUpdateStudent = () => {
     mutationFn: ({ id, studentData }) => dashboardService.updateStudent(id, studentData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 };
@@ -50,6 +52,7 @@ export const useAssignGuardian = () => {
     mutationFn: dashboardService.assignGuardian,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 };
@@ -60,6 +63,7 @@ export const useDeleteStudent = () => {
     mutationFn: (id) => dashboardService.deleteStudent(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
     },
   });
 };

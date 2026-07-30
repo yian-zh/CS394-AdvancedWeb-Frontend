@@ -63,15 +63,34 @@ const UserManagementPage = ({ user, onSignOut }) => {
   const [formErrors, setFormErrors] = useState({});
 
   const users = useMemo(() => {
-    return rawUsers.map(u => ({
-      id: u.user_id,
-      name: `${u.first_name} ${u.last_name}`,
-      role: u.role ? (u.role.charAt(0).toUpperCase() + u.role.slice(1)) : 'User',
-      email: u.email,
-      phone: u.phone_number || 'N/A',
-      assignment: u.role === 'driver' ? 'Driver Profile' : (u.role === 'guardian' ? 'Guardian Profile' : 'System Admin'),
-      isActive: !!u.status,
-    }));
+    return rawUsers.map(u => {
+      let assignedStudents = [];
+      if (u.guardian && u.guardian.students && Array.isArray(u.guardian.students)) {
+        assignedStudents = u.guardian.students;
+      }
+
+      let defaultAssignment = 'System Admin';
+      if (u.role === 'driver') {
+        defaultAssignment = 'Driver Profile';
+      } else if (u.role === 'guardian') {
+        if (assignedStudents.length > 0) {
+          defaultAssignment = assignedStudents.map(s => `${s.first_name} ${s.last_name}`).join(', ');
+        } else {
+          defaultAssignment = 'Unassigned';
+        }
+      }
+
+      return {
+        id: u.user_id,
+        name: `${u.first_name} ${u.last_name}`,
+        role: u.role ? (u.role.charAt(0).toUpperCase() + u.role.slice(1)) : 'User',
+        email: u.email,
+        phone: u.phone_number || 'N/A',
+        assignment: defaultAssignment,
+        students: assignedStudents,
+        isActive: !!u.status,
+      };
+    });
   }, [rawUsers]);
 
   // Helper to extract initials
@@ -417,7 +436,25 @@ const UserManagementPage = ({ user, onSignOut }) => {
                         </td>
                         <td>
                           <div className="assignment-cell">
-                            {u.assignment.toLowerCase() !== 'unassigned' ? (
+                            {u.role.toLowerCase() === 'guardian' ? (
+                              u.students && u.students.length > 0 ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {u.students.map((student) => (
+                                    <div key={student.student_id} className="assignment-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                      <GraduationCap size={13} style={{ color: 'var(--primary-brand, #3b82f6)' }} />
+                                      <span style={{ fontWeight: 500 }}>{student.first_name} {student.last_name}</span>
+                                      {student.grade_level && (
+                                        <span style={{ fontSize: '11px', opacity: 0.75 }}>
+                                          ({student.grade_level})
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="assignment-unassigned">No Student Assigned</span>
+                              )
+                            ) : u.assignment.toLowerCase() !== 'unassigned' ? (
                               <div className="assignment-tag">
                                 <span className="assignment-bullet"></span>
                                 {u.assignment}
