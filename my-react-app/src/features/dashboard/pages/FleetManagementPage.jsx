@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, Wrench, Calendar, AlertTriangle, MapPin,
-  GraduationCap, FileText, DollarSign
+  GraduationCap, FileText, DollarSign, Activity
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -23,10 +23,10 @@ const FleetManagementPage = ({ user, onSignOut }) => {
 
   const { data: busesResponse, isLoading: isBusesLoading, error: busesError } = useBuses({ page: busPage, perPage: itemsPerPage });
   const rawBuses = busesResponse?.data ?? [];
-  const busesMeta = busesResponse?.meta ?? {};
+  const busesMeta = busesResponse?.meta ?? busesResponse ?? {};
   const { data: maintResponse, isLoading: isMaintLoading, error: maintError } = usePendingMaintenance({ page: maintPage, perPage: itemsPerPage, search: debouncedSearch });
   const maintenanceData = maintResponse?.data ?? [];
-  const maintMeta = maintResponse?.meta ?? {};
+  const maintMeta = maintResponse?.meta ?? maintResponse ?? {};
   
   const createMaintenanceMutation = useCreateMaintenanceRequest();
   const resolveMaintenanceMutation = useResolveMaintenanceRequest();
@@ -337,6 +337,10 @@ const FleetManagementPage = ({ user, onSignOut }) => {
           <Link to="/finance" className="sidebar-link">
             <DollarSign size={18} />
             Finance
+          </Link>
+          <Link to="/telemetry" className="sidebar-link">
+            <Activity size={18} />
+            Telemetry
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

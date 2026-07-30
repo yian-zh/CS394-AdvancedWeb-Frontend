@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'https://api-finals-fsjkg.ondigitalocean.app/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://cs394-advancedweb-backend.onrender.com/api';
 
 /**
  * Helper to construct headers with optional Sanctum Bearer Token

@@ -4,7 +4,7 @@ import {
   Bus, Users, LogOut, Search, ChevronLeft, Wrench, Calendar, 
   AlertTriangle, MapPin, SlidersHorizontal, Download, FileText, 
   FileCheck, Edit, ArrowLeft, ArrowUpRight, Gauge, Milestone,
-  Camera, Plus, GraduationCap, DollarSign
+  Camera, Plus, GraduationCap, DollarSign, Activity
 } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
@@ -262,6 +262,10 @@ const BusDetailPage = ({ user, onSignOut }) => {
           <Link to="/finance" className="sidebar-link">
             <DollarSign size={18} />
             Finance
+          </Link>
+          <Link to="/telemetry" className="sidebar-link">
+            <Activity size={18} />
+            Telemetry
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

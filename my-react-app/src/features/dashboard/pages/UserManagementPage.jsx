@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, MapPin, CloudUpload,
-  GraduationCap, AlertTriangle, DollarSign
+  GraduationCap, AlertTriangle, DollarSign, Activity
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -21,13 +21,26 @@ const UserManagementPage = ({ user, onSignOut }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const { data: usersResponse, isLoading, error } = useUsers({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
+  const [activeTab, setActiveTab] = useState('All Users');
+
+  const targetRole = useMemo(() => {
+    if (activeTab === 'Drivers') return 'driver';
+    if (activeTab === 'Guardians') return 'guardian';
+    if (activeTab === 'Administrators') return 'admin';
+    return '';
+  }, [activeTab]);
+
+  const { data: usersResponse, isLoading, error } = useUsers({ 
+    page: currentPage, 
+    perPage: itemsPerPage, 
+    search: debouncedSearch,
+    role: targetRole
+  });
   const rawUsers = usersResponse?.data ?? [];
-  const paginationMeta = usersResponse?.meta ?? {};
+  const paginationMeta = usersResponse?.meta ?? usersResponse ?? {};
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
-  const [activeTab, setActiveTab] = useState('All Users');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'
   const [selectedUserIdToEdit, setSelectedUserIdToEdit] = useState(null);
@@ -53,7 +66,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
     return rawUsers.map(u => ({
       id: u.user_id,
       name: `${u.first_name} ${u.last_name}`,
-      role: u.role.charAt(0).toUpperCase() + u.role.slice(1),
+      role: u.role ? (u.role.charAt(0).toUpperCase() + u.role.slice(1)) : 'User',
       email: u.email,
       phone: u.phone_number || 'N/A',
       assignment: u.role === 'driver' ? 'Driver Profile' : (u.role === 'guardian' ? 'Guardian Profile' : 'System Admin'),
@@ -77,7 +90,8 @@ const UserManagementPage = ({ user, onSignOut }) => {
     switch (role.toLowerCase()) {
       case 'driver': return 'badge-driver';
       case 'guardian': return 'badge-guardian';
-      case 'administrator': return 'badge-admin';
+      case 'administrator':
+      case 'admin': return 'badge-admin';
       default: return '';
     }
   };
@@ -87,18 +101,14 @@ const UserManagementPage = ({ user, onSignOut }) => {
     switch (role.toLowerCase()) {
       case 'driver': return 'avatar-driver';
       case 'guardian': return 'avatar-guardian';
-      case 'administrator': return 'avatar-admin';
+      case 'administrator':
+      case 'admin': return 'avatar-admin';
       default: return '';
     }
   };
 
-  // Role Filter (search is handled server-side)
-  const filteredUsers = users.filter((u) => {
-    if (activeTab === 'Drivers' && u.role !== 'Driver') return false;
-    if (activeTab === 'Guardians' && u.role !== 'Guardian') return false;
-    if (activeTab === 'Administrators' && u.role !== 'Administrator') return false;
-    return true;
-  });
+  // Server-side filtered users
+  const filteredUsers = users;
 
   const openAddModal = () => {
     setModalMode('add');
@@ -247,6 +257,10 @@ const UserManagementPage = ({ user, onSignOut }) => {
             <DollarSign size={18} />
             Finance
           </Link>
+          <Link to="/telemetry" className="sidebar-link">
+            <Activity size={18} />
+            Telemetry
+          </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />
             Settings
@@ -329,6 +343,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
                   className={`filter-tab ${activeTab === tab ? 'is-active' : ''}`}
                   onClick={() => {
                     setActiveTab(tab);
+                    setCurrentPage(1);
                   }}
                 >
                   {tab}

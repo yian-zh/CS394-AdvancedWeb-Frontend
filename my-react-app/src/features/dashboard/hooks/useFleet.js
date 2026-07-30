@@ -1,18 +1,47 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboardService';
 
-export const useBuses = ({ page = 1, perPage = 10, search = '' } = {}) => {
-  return useQuery({
-    queryKey: ['buses', { page, perPage, search }],
-    queryFn: () => dashboardService.getBuses({ page, perPage, search }),
+export const useBuses = ({ page = 1, perPage = 10, search = '', status = '' } = {}) => {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['buses', { page, perPage, search, status }],
+    queryFn: () => dashboardService.getBuses({ page, perPage, search, status }),
   });
+
+  useEffect(() => {
+    const lastPage = query.data?.last_page || query.data?.meta?.last_page;
+    if (lastPage && page < lastPage) {
+      queryClient.prefetchQuery({
+        queryKey: ['buses', { page: page + 1, perPage, search, status }],
+        queryFn: () => dashboardService.getBuses({ page: page + 1, perPage, search, status }),
+      });
+    }
+  }, [query.data, page, perPage, search, status, queryClient]);
+
+  return query;
 };
 
 export const usePendingMaintenance = ({ page = 1, perPage = 10, search = '' } = {}) => {
-  return useQuery({
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
     queryKey: ['maintenance', 'pending', { page, perPage, search }],
     queryFn: () => dashboardService.getPendingMaintenance({ page, perPage, search }),
   });
+
+  useEffect(() => {
+    const lastPage = query.data?.last_page || query.data?.meta?.last_page;
+    if (lastPage && page < lastPage) {
+      queryClient.prefetchQuery({
+        queryKey: ['maintenance', 'pending', { page: page + 1, perPage, search }],
+        queryFn: () => dashboardService.getPendingMaintenance({ page: page + 1, perPage, search }),
+      });
+    }
+  }, [query.data, page, perPage, search, queryClient]);
+
+  return query;
 };
 
 export const useCreateMaintenanceRequest = () => {

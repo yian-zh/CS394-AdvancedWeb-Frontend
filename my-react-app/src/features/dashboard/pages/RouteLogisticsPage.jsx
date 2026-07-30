@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, X, MapPin, 
-  GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2, DollarSign
+  GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2, DollarSign, Activity
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -72,7 +72,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
 
   const { data: routesResponse, isLoading, error } = useRoutes({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawRoutes = routesResponse?.data ?? [];
-  const routesMeta = routesResponse?.meta ?? {};
+  const routesMeta = routesResponse?.meta ?? routesResponse ?? {};
   const { data: busesResponse } = useBuses({ perPage: 200 });
   const rawBuses = busesResponse?.data ?? [];
   const createRouteMutation = useCreateRoute();
@@ -361,6 +361,10 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
             <DollarSign size={18} />
             Finance
           </Link>
+          <Link to="/telemetry" className="sidebar-link">
+            <Activity size={18} />
+            Telemetry
+          </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />
             Settings
@@ -425,7 +429,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
             <div className="header-text-container" style={{ textAlign: 'left' }}>
               <h1 className="canvas-title" style={{ fontSize: '28px', margin: 0 }}>Route Directory</h1>
               <p className="canvas-subtitle" style={{ fontSize: '14px' }}>
-                Monitor and manage {routes.length} active transportation routes across the district.
+                Monitor and manage {(routesMeta.total || routes.length).toLocaleString()} active transportation routes across the district.
               </p>
             </div>
 

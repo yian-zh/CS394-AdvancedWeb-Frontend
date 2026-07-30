@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, 
-  GraduationCap, MapPin, DollarSign, Edit3, AlertCircle, CheckCircle2, UserCheck
+  GraduationCap, MapPin, DollarSign, Edit3, AlertCircle, CheckCircle2, UserCheck, Activity
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -31,15 +31,15 @@ const FinancePage = ({ user, onSignOut }) => {
 
   const { data: feeResponse, isLoading: isFeesLoading } = useFeeStructures({ page: feePage, perPage: feesPerPage });
   const rawFeeStructures = feeResponse?.data ?? [];
-  const feeMeta = feeResponse?.meta ?? {};
+  const feeMeta = feeResponse?.meta ?? feeResponse ?? {};
   const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage, search: debouncedSearch });
   const rawInvoices = invoiceResponse?.data ?? [];
-  const invoiceMeta = invoiceResponse?.meta ?? {};
+  const invoiceMeta = invoiceResponse?.meta ?? invoiceResponse ?? {};
   const [studentFeePage, setStudentFeePage] = useState(1);
   const studentsPerPage = 10;
   const { data: studentsResponse } = useStudents({ page: studentFeePage, perPage: studentsPerPage });
   const rawStudents = studentsResponse?.data ?? [];
-  const studentsMeta = studentsResponse?.meta ?? {};
+  const studentsMeta = studentsResponse?.meta ?? studentsResponse ?? {};
 
   const createFeeMutation = useCreateFeeStructure();
   const updateFeeMutation = useUpdateFeeStructure();
@@ -408,6 +408,10 @@ const FinancePage = ({ user, onSignOut }) => {
           <Link to="/finance" className="sidebar-link is-active">
             <DollarSign size={18} />
             Finance
+          </Link>
+          <Link to="/telemetry" className="sidebar-link">
+            <Activity size={18} />
+            Telemetry
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

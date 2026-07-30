@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, 
-  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign
+  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign, Activity
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -31,17 +31,29 @@ const StudentsPage = ({ user, onSignOut }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const { data: studentsResponse, isLoading, error } = useStudents({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
+  const [gradeFilter, setGradeFilter] = useState('All');
+  const [routeFilter, setRouteFilter] = useState('All');
+
+  const { data: studentsResponse, isLoading, error } = useStudents({ 
+    page: currentPage, 
+    perPage: itemsPerPage, 
+    search: debouncedSearch,
+    grade: gradeFilter,
+    routeId: routeFilter
+  });
   const rawStudents = studentsResponse?.data ?? [];
-  const studentsMeta = studentsResponse?.meta ?? {};
+  const studentsMeta = studentsResponse?.meta ?? {
+    total: studentsResponse?.total,
+    last_page: studentsResponse?.last_page
+  };
+  const summaryStats = studentsResponse?.summary_stats;
+
   const { data: routesResponse } = useRoutes({ perPage: 200 });
   const rawRoutes = routesResponse?.data ?? [];
   const [guardianUserId, setGuardianUserId] = useState(null);
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
-  const [gradeFilter, setGradeFilter] = useState('All');
-  const [routeFilter, setRouteFilter] = useState('All');
   
   const students = useMemo(() => {
     return rawStudents.map(s => {
@@ -142,23 +154,19 @@ const StudentsPage = ({ user, onSignOut }) => {
     return 'badge-route-unassigned';
   };
 
-  // Calculate real stats directly from backend API dataset
+  // Calculate real system-wide stats from backend API aggregate summary or metadata
   const stats = useMemo(() => {
-    const totalCount = studentsMeta.total || rawStudents.length;
-
-    // Active Enrolled Students
-    const enrolledCount = rawStudents.filter(s => 
+    const totalCount = summaryStats?.total_students ?? studentsMeta.total ?? rawStudents.length;
+    const enrolledCount = summaryStats?.currently_enrolled ?? rawStudents.filter(s => 
       !s.enrollment_status || s.enrollment_status.toLowerCase() === 'active'
     ).length;
     const enrollmentRate = totalCount > 0 ? ((enrolledCount / totalCount) * 100).toFixed(1) : '100.0';
 
-    // Suspended / Inactive Accounts
-    const suspendedCount = rawStudents.filter(s => 
+    const suspendedCount = summaryStats?.suspended_accounts ?? rawStudents.filter(s => 
       s.enrollment_status && (s.enrollment_status.toLowerCase() === 'suspended' || s.enrollment_status.toLowerCase() === 'inactive')
     ).length;
 
-    // Transport Users (Students with assigned route or bus stop)
-    const transportCount = rawStudents.filter(s => {
+    const transportCount = summaryStats?.transport_users ?? rawStudents.filter(s => {
       const hasStops = s.stops && Array.isArray(s.stops) && s.stops.length > 0;
       return hasStops;
     }).length;
@@ -181,16 +189,10 @@ const StudentsPage = ({ user, onSignOut }) => {
         status: `${transportCount} Active bus stop assignments` 
       }
     };
-  }, [rawStudents, studentsMeta]);
+  }, [rawStudents, studentsMeta, summaryStats]);
 
-  // Grade & Route filter (applied to server-side search results)
-  const filteredStudents = useMemo(() => {
-    return students.filter((s) => {
-      const matchesGrade = gradeFilter === 'All' || s.grade === gradeFilter;
-      const matchesRoute = routeFilter === 'All' || s.assignedRoute === routeFilter;
-      return matchesGrade && matchesRoute;
-    });
-  }, [students, gradeFilter, routeFilter]);
+  // Server-side filtered students
+  const filteredStudents = students;
 
   // Modal Openers
   const openAddModal = () => {
@@ -391,6 +393,10 @@ const StudentsPage = ({ user, onSignOut }) => {
           <Link to="/finance" className="sidebar-link">
             <DollarSign size={18} />
             Finance
+          </Link>
+          <Link to="/telemetry" className="sidebar-link">
+            <Activity size={18} />
+            Telemetry
           </Link>
           <button type="button" className="sidebar-link">
             <SlidersHorizontal size={18} />

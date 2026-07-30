@@ -13,6 +13,7 @@ const BusDetailPage = lazy(() => import('./features/dashboard/pages/BusDetailPag
 const RouteLogisticsPage = lazy(() => import('./features/dashboard/pages/RouteLogisticsPage'));
 const RouteDetailPage = lazy(() => import('./features/dashboard/pages/RouteDetailPage'));
 const FinancePage = lazy(() => import('./features/dashboard/pages/FinancePage'));
+const DatabaseTelemetryPage = lazy(() => import('./features/dashboard/pages/DatabaseTelemetryPage'));
 
 function App() {
   const [user, setUser] = useState(() => authService.getCurrentUser());
@@ -93,6 +94,14 @@ function App() {
             element={
               <ProtectedRoute user={user}>
                 <FinancePage user={user} onSignOut={handleSignOut} />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/telemetry" 
+            element={
+              <ProtectedRoute user={user}>
+                <DatabaseTelemetryPage user={user} onSignOut={handleSignOut} />
               </ProtectedRoute>
             } 
           />

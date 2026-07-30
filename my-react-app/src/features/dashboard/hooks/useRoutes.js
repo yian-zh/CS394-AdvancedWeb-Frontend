@@ -1,11 +1,26 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboardService';
 
-export const useRoutes = ({ page = 1, perPage = 10, search = '' } = {}) => {
-  return useQuery({
-    queryKey: ['routes', { page, perPage, search }],
-    queryFn: () => dashboardService.getRoutes({ page, perPage, search }),
+export const useRoutes = ({ page = 1, perPage = 10, search = '', driverId = '' } = {}) => {
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
+    queryKey: ['routes', { page, perPage, search, driverId }],
+    queryFn: () => dashboardService.getRoutes({ page, perPage, search, driverId }),
   });
+
+  useEffect(() => {
+    const lastPage = query.data?.last_page || query.data?.meta?.last_page;
+    if (lastPage && page < lastPage) {
+      queryClient.prefetchQuery({
+        queryKey: ['routes', { page: page + 1, perPage, search, driverId }],
+        queryFn: () => dashboardService.getRoutes({ page: page + 1, perPage, search, driverId }),
+      });
+    }
+  }, [query.data, page, perPage, search, driverId, queryClient]);
+
+  return query;
 };
 
 export const useCreateRoute = () => {

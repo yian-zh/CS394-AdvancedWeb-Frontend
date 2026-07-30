@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'https://api-finals-fsjkg.ondigitalocean.app/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://cs394-advancedweb-backend.onrender.com/api';
 
 /**
  * Helper to construct headers with optional Sanctum Bearer Token
@@ -50,9 +50,13 @@ export const dashboardService = {
   // ==========================================
   // 👥 User Management
   // ==========================================
-  async getUsers({ page = 1, perPage = 10, search = '' } = {}) {
+  // ==========================================
+  // 👥 User Management
+  // ==========================================
+  async getUsers({ page = 1, perPage = 10, search = '', role = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
+    if (role) params.set('role', role);
     const response = await fetch(`${API_URL}/users?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -97,9 +101,11 @@ export const dashboardService = {
   // ==========================================
   // 🗃️ Student Directory
   // ==========================================
-  async getStudents({ page = 1, perPage = 10, search = '' } = {}) {
+  async getStudents({ page = 1, perPage = 10, search = '', grade = '', routeId = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
+    if (grade && grade !== 'All') params.set('grade', grade);
+    if (routeId && routeId !== 'All') params.set('route_id', routeId);
     const response = await fetch(`${API_URL}/students?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -145,9 +151,10 @@ export const dashboardService = {
   // ==========================================
   // 🚌 Fleet Infrastructure (PostgreSQL)
   // ==========================================
-  async getBuses({ page = 1, perPage = 10, search = '' } = {}) {
+  async getBuses({ page = 1, perPage = 10, search = '', status = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
+    if (status && status !== 'All') params.set('status', status);
     const response = await fetch(`${API_URL}/buses?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -216,9 +223,10 @@ export const dashboardService = {
   // ==========================================
   // 🗺️ Route Logistics & Deployment
   // ==========================================
-  async getRoutes({ page = 1, perPage = 10, search = '' } = {}) {
+  async getRoutes({ page = 1, perPage = 10, search = '', driverId = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
+    if (driverId) params.set('driver_id', driverId);
     const response = await fetch(`${API_URL}/routes?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -351,6 +359,17 @@ export const dashboardService = {
       method: 'PATCH',
       headers: getHeaders(),
       body: JSON.stringify({ status }),
+    });
+    return handleResponse(response);
+  },
+
+  // ==========================================
+  // 📊 Telemetry & System Monitoring
+  // ==========================================
+  async getDatabaseTelemetry() {
+    const response = await fetch(`${API_URL}/telemetry/database`, {
+      method: 'GET',
+      headers: getHeaders(),
     });
     return handleResponse(response);
   }
