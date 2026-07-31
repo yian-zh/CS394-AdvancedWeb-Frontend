@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, 
-  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign, Activity, Ban
+  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign, Activity, Ban, Loader2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -11,7 +11,7 @@ import Input from '../../../components/ui/Input';
 import Pagination from '../../../components/ui/Pagination';
 import AsyncSelect from '../../../components/ui/AsyncSelect';
 import { useDebounce } from '../../../hooks/useDebounce';
-import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent, useToggleStudentStatus } from '../hooks/useStudents';
+import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent, useToggleStudentStatus, useAssignGuardian } from '../hooks/useStudents';
 import { dashboardService } from '../services/dashboardService';
 import { useRoutes } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
@@ -57,6 +57,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
   const toggleStudentStatusMutation = useToggleStudentStatus();
+  const assignGuardianMutation = useAssignGuardian();
 
   // Suspend Confirmation Modal State
   const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
@@ -68,6 +69,9 @@ const StudentsPage = ({ user, onSignOut }) => {
       const guardianUser = primaryGuardian && primaryGuardian.user;
       const guardianNameStr = guardianUser ? `${guardianUser.first_name} ${guardianUser.last_name}` : 'No Guardian';
       const guardianPhoneStr = guardianUser ? guardianUser.phone_number : 'N/A';
+      const guardianId = primaryGuardian
+        ? (primaryGuardian.guardian_id || primaryGuardian.id || guardianUser?.user_id || guardianUser?.id || null)
+        : null;
       
       // Route details: Pick the latest assigned route stop
       const latestStop = (s.stops && s.stops.length > 0)
@@ -82,6 +86,7 @@ const StudentsPage = ({ user, onSignOut }) => {
         id: String(s.student_id),
         name: `${s.first_name} ${s.last_name}`,
         guardianName: guardianNameStr,
+        guardianId,
         grade: s.grade_level || 'Grade 10',
         assignedRoute: assignedRouteStr,
         gender: s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : 'Male',
@@ -220,7 +225,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   };
 
   const openEditModal = (student) => {
-    setGuardianUserId(null);
+    setGuardianUserId(student.guardianId ?? null);
     setModalMode('edit');
     setSelectedStudentId(student.id);
     const names = student.name.split(' ');
@@ -256,13 +261,13 @@ const StudentsPage = ({ user, onSignOut }) => {
   };
 
   const closeModal = () => {
-    if (isSubmitting || updateStudentMutation.isPending || createStudentMutation.isPending) return;
+    if (isSubmitting || updateStudentMutation.isPending || createStudentMutation.isPending || assignGuardianMutation.isPending) return;
     setIsModalOpen(false);
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (isSubmitting || updateStudentMutation.isPending || createStudentMutation.isPending) return;
+    if (isSubmitting || updateStudentMutation.isPending || createStudentMutation.isPending || assignGuardianMutation.isPending) return;
 
     const errors = {};
     if (!firstName.trim()) errors.firstName = 'First Name is required';
@@ -291,7 +296,14 @@ const StudentsPage = ({ user, onSignOut }) => {
       };
 
       if (modalMode === 'add') {
-        await createStudentMutation.mutateAsync(studentData);
+        const created = await createStudentMutation.mutateAsync(studentData);
+        const newStudentId = created?.student_id ?? created?.data?.student_id ?? created?.id ?? created?.data?.id;
+        if (guardianUserId && newStudentId) {
+          await assignGuardianMutation.mutateAsync({
+            student_id: parseInt(newStudentId, 10),
+            guardian_id: parseInt(guardianUserId, 10),
+          });
+        }
         setNotificationBanner({
           type: 'success',
           title: 'New Student Record Created',
@@ -304,6 +316,13 @@ const StudentsPage = ({ user, onSignOut }) => {
         });
       } else {
         await updateStudentMutation.mutateAsync({ id: selectedStudentId, studentData });
+
+        if (guardianUserId) {
+          await assignGuardianMutation.mutateAsync({
+            student_id: parseInt(selectedStudentId, 10),
+            guardian_id: parseInt(guardianUserId, 10),
+          });
+        }
 
         // Calculate exact diffs between initial form state and submitted values
         const changesList = [];
@@ -920,17 +939,17 @@ const StudentsPage = ({ user, onSignOut }) => {
                   type="button" 
                   variant="outline" 
                   onClick={closeModal}
-                  disabled={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending}
+                  disabled={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending || assignGuardianMutation.isPending}
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   variant="primary"
-                  disabled={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending}
-                  isLoading={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending}
+                  disabled={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending || assignGuardianMutation.isPending}
+                  isLoading={isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending || assignGuardianMutation.isPending}
                 >
-                  {isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending
+                  {isSubmitting || createStudentMutation.isPending || updateStudentMutation.isPending || assignGuardianMutation.isPending
                     ? (modalMode === 'add' ? 'Adding Student...' : 'Saving Changes...')
                     : (modalMode === 'add' ? 'Add Student' : 'Save Changes')}
                 </Button>

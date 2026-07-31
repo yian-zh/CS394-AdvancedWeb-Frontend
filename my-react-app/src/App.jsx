@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import ProtectedRoute from './components/ProtectedRoute';
 import PageLoader from './components/ui/PageLoader';
@@ -15,10 +15,13 @@ const lazyWithRetry = (componentImport) =>
       sessionStorage.removeItem('chunk_reload_timestamp');
       return component;
     } catch (error) {
-      // Automatic recovery for 404 dynamic import chunk failures after new deployment builds
+      // Automatic recovery for 404 dynamic import chunk failures after new deployment builds.
+      // Use a cache-busted reload so the browser fetches the NEW index.html (which references
+      // the new chunk hashes) instead of reusing the cached old one via location.reload().
       if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
         sessionStorage.setItem('chunk_reload_timestamp', String(now));
-        window.location.reload();
+        const sep = window.location.search ? '&' : '?';
+        window.location.assign(`${window.location.pathname}${window.location.search}${sep}v=${now}${window.location.hash}`);
         return new Promise(() => {});
       }
       throw error;
@@ -51,7 +54,7 @@ function App() {
   };
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Navigate to="/students" replace />} />
@@ -128,7 +131,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
