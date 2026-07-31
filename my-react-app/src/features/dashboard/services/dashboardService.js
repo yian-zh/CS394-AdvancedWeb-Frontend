@@ -329,7 +329,7 @@ export const dashboardService = {
 
   async unassignFeeStructure(studentId) {
     const response = await fetch(`${API_URL}/billing/unassign-fee/${studentId}`, {
-      method: 'DELETE',
+      method: 'POST',
       headers: getHeaders(),
     });
     return handleResponse(response);
