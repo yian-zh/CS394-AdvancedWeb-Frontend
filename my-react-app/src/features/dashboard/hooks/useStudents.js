@@ -2,12 +2,12 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboardService';
 
-export const useStudents = ({ page = 1, perPage = 10, search = '', grade = '', routeId = '', status = '' } = {}) => {
+export const useStudents = ({ page = 1, perPage = 10, search = '', grade = '', routeId = '', status = '', hasFee = '' } = {}) => {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['students', { page, perPage, search, grade, routeId, status }],
-    queryFn: () => dashboardService.getStudents({ page, perPage, search, grade, routeId, status }),
+    queryKey: ['students', { page, perPage, search, grade, routeId, status, hasFee }],
+    queryFn: () => dashboardService.getStudents({ page, perPage, search, grade, routeId, status, hasFee }),
   });
 
   // Prefetch next page (page + 1) in the background when current page query succeeds
@@ -15,11 +15,11 @@ export const useStudents = ({ page = 1, perPage = 10, search = '', grade = '', r
     const lastPage = query.data?.last_page || query.data?.meta?.last_page;
     if (lastPage && page < lastPage) {
       queryClient.prefetchQuery({
-        queryKey: ['students', { page: page + 1, perPage, search, grade, routeId, status }],
-        queryFn: () => dashboardService.getStudents({ page: page + 1, perPage, search, grade, routeId, status }),
+        queryKey: ['students', { page: page + 1, perPage, search, grade, routeId, status, hasFee }],
+        queryFn: () => dashboardService.getStudents({ page: page + 1, perPage, search, grade, routeId, status, hasFee }),
       });
     }
-  }, [query.data, page, perPage, search, grade, routeId, status, queryClient]);
+  }, [query.data, page, perPage, search, grade, routeId, status, hasFee, queryClient]);
 
   return query;
 };

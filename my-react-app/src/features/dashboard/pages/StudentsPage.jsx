@@ -1038,33 +1038,36 @@ const StudentsPage = ({ user, onSignOut }) => {
       {/* Student Suspend / Reinstate Confirmation Modal */}
       {isSuspendModalOpen && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
-          <div className="modal-container" style={{ maxWidth: '420px' }}>
-            <div className="modal-header">
-              <h2 className="modal-title" style={{ color: studentToSuspend?.isSuspended ? '#16a34a' : '#e11d48', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="modal-card" style={{ maxWidth: '440px', width: '100%', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }}>
+            <header className="modal-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '700', color: studentToSuspend?.isSuspended ? '#16a34a' : '#e11d48', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
                 {studentToSuspend?.isSuspended ? <CheckCircle2 size={20} /> : <Ban size={20} />}
                 {studentToSuspend?.isSuspended ? 'Reinstate Student' : 'Suspend Student'}
               </h2>
-            </div>
-            <div style={{ padding: '20px 0', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}>
+              <button type="button" className="modal-close-btn" onClick={() => { setIsSuspendModalOpen(false); setStudentToSuspend(null); }}>
+                <X size={18} />
+              </button>
+            </header>
+            <div style={{ padding: '8px 0 20px 0', color: '#475569', fontSize: '14px', lineHeight: '1.5' }}>
               Are you sure you want to {studentToSuspend?.isSuspended ? 'reinstate' : 'suspend'}{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>
+              <strong style={{ color: '#0f172a' }}>
                 {studentToSuspend?.name || 'this student'}
               </strong>
               ?
               {!studentToSuspend?.isSuspended && (
-                <div style={{ marginTop: '10px', fontSize: '13px', color: '#dc2626', backgroundColor: '#fee2e2', padding: '10px 12px', borderRadius: '6px' }}>
+                <div style={{ marginTop: '12px', fontSize: '13px', color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fecdd3', padding: '10px 12px', borderRadius: '8px' }}>
                   <strong>Notice:</strong> Suspending this student will flag them as Suspended on driver attendance rosters, pause live telemetry tracking, and reflect across guardian apps.
                 </div>
               )}
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <Button
+            <footer className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+              <button
                 type="button"
-                variant="outline"
+                className="action-btn"
                 onClick={() => { setIsSuspendModalOpen(false); setStudentToSuspend(null); }}
               >
                 Cancel
-              </Button>
+              </button>
               <button
                 type="button"
                 onClick={async () => {
@@ -1080,21 +1083,25 @@ const StudentsPage = ({ user, onSignOut }) => {
                 }}
                 disabled={toggleStudentStatusMutation.isPending}
                 style={{
-                  padding: '8px 20px',
-                  background: studentToSuspend?.isSuspended ? '#16a34a' : '#e11d48',
-                  color: '#fff',
+                  padding: '8px 18px',
+                  background: studentToSuspend?.isSuspended ? '#16a34a' : '#dc2626',
+                  color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
                   fontWeight: 600,
+                  fontSize: '13px',
                   cursor: toggleStudentStatusMutation.isPending ? 'not-allowed' : 'pointer',
                   opacity: toggleStudentStatusMutation.isPending ? 0.7 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
               >
                 {toggleStudentStatusMutation.isPending 
                   ? 'Updating...' 
                   : (studentToSuspend?.isSuspended ? 'Reinstate Student' : 'Suspend Student')}
               </button>
-            </div>
+            </footer>
           </div>
         </div>
       )}

@@ -734,25 +734,30 @@ const UserManagementPage = ({ user, onSignOut }) => {
       {/* Delete Confirmation Modal */}
       {isDeleteConfirmOpen && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
-          <div className="modal-container" style={{ maxWidth: '400px' }}>
-            <div className="modal-header">
-              <h2 className="modal-title" style={{ color: '#ef4444' }}>⚠️ Delete User</h2>
-            </div>
-            <div style={{ padding: '20px 0', color: 'var(--text-secondary)' }}>
+          <div className="modal-card" style={{ maxWidth: '440px', width: '100%', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }}>
+            <header className="modal-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <AlertTriangle size={20} /> Delete User Account
+              </h2>
+              <button type="button" className="modal-close-btn" onClick={() => { setIsDeleteConfirmOpen(false); setUserToDelete(null); }}>
+                <X size={18} />
+              </button>
+            </header>
+            <div style={{ padding: '8px 0 20px 0', color: '#475569', fontSize: '14px', lineHeight: '1.5' }}>
               Are you sure you want to permanently delete{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>
+              <strong style={{ color: '#0f172a' }}>
                 {userToDelete?.name || 'this user'}
               </strong>
               ? This action cannot be undone.
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <Button
+            <footer className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+              <button
                 type="button"
-                variant="outline"
+                className="action-btn"
                 onClick={() => { setIsDeleteConfirmOpen(false); setUserToDelete(null); }}
               >
                 Cancel
-              </Button>
+              </button>
               <button
                 type="button"
                 onClick={async () => {
@@ -768,19 +773,23 @@ const UserManagementPage = ({ user, onSignOut }) => {
                 }}
                 disabled={deleteUserMutation.isPending}
                 style={{
-                  padding: '8px 20px',
-                  background: '#ef4444',
-                  color: '#fff',
+                  padding: '8px 18px',
+                  background: '#dc2626',
+                  color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
                   fontWeight: 600,
+                  fontSize: '13px',
                   cursor: deleteUserMutation.isPending ? 'not-allowed' : 'pointer',
                   opacity: deleteUserMutation.isPending ? 0.7 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
               >
                 {deleteUserMutation.isPending ? 'Deleting...' : 'Delete User'}
               </button>
-            </div>
+            </footer>
           </div>
         </div>
       )}
@@ -788,33 +797,36 @@ const UserManagementPage = ({ user, onSignOut }) => {
       {/* Suspend / Activate Confirmation Modal */}
       {isSuspendModalOpen && (
         <div className="modal-overlay" style={{ zIndex: 9999 }}>
-          <div className="modal-container" style={{ maxWidth: '420px' }}>
-            <div className="modal-header">
-              <h2 className="modal-title" style={{ color: userToSuspend?.isActive ? '#e11d48' : '#16a34a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="modal-card" style={{ maxWidth: '440px', width: '100%', padding: '24px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }}>
+            <header className="modal-header" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '700', color: userToSuspend?.isActive ? '#e11d48' : '#16a34a', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
                 {userToSuspend?.isActive ? <Ban size={20} /> : <CheckCircle2 size={20} />}
                 {userToSuspend?.isActive ? 'Suspend User Account' : 'Activate User Account'}
               </h2>
-            </div>
-            <div style={{ padding: '20px 0', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}>
+              <button type="button" className="modal-close-btn" onClick={() => { setIsSuspendModalOpen(false); setUserToSuspend(null); }}>
+                <X size={18} />
+              </button>
+            </header>
+            <div style={{ padding: '8px 0 20px 0', color: '#475569', fontSize: '14px', lineHeight: '1.5' }}>
               Are you sure you want to {userToSuspend?.isActive ? 'suspend' : 'activate'}{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>
+              <strong style={{ color: '#0f172a' }}>
                 {userToSuspend?.name || 'this user'}
               </strong>
               ?
               {userToSuspend?.isActive && (
-                <div style={{ marginTop: '10px', fontSize: '13px', color: '#dc2626', backgroundColor: '#fee2e2', padding: '10px 12px', borderRadius: '6px' }}>
+                <div style={{ marginTop: '12px', fontSize: '13px', color: '#991b1b', backgroundColor: '#fef2f2', border: '1px solid #fecdd3', padding: '10px 12px', borderRadius: '8px' }}>
                   <strong>Notice:</strong> Suspending this account will immediately revoke all active login sessions and block API access across Redis.
                 </div>
               )}
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <Button
+            <footer className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+              <button
                 type="button"
-                variant="outline"
+                className="action-btn"
                 onClick={() => { setIsSuspendModalOpen(false); setUserToSuspend(null); }}
               >
                 Cancel
-              </Button>
+              </button>
               <button
                 type="button"
                 onClick={async () => {
@@ -830,21 +842,25 @@ const UserManagementPage = ({ user, onSignOut }) => {
                 }}
                 disabled={toggleUserStatusMutation.isPending}
                 style={{
-                  padding: '8px 20px',
-                  background: userToSuspend?.isActive ? '#e11d48' : '#16a34a',
-                  color: '#fff',
+                  padding: '8px 18px',
+                  background: userToSuspend?.isActive ? '#dc2626' : '#16a34a',
+                  color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
                   fontWeight: 600,
+                  fontSize: '13px',
                   cursor: toggleUserStatusMutation.isPending ? 'not-allowed' : 'pointer',
                   opacity: toggleUserStatusMutation.isPending ? 0.7 : 1,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
               >
                 {toggleUserStatusMutation.isPending 
                   ? 'Updating...' 
                   : (userToSuspend?.isActive ? 'Suspend Account' : 'Activate Account')}
               </button>
-            </div>
+            </footer>
           </div>
         </div>
       )}

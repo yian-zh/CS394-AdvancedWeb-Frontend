@@ -41,7 +41,12 @@ const FinancePage = ({ user, onSignOut }) => {
   const invoiceMeta = invoiceResponse?.meta ?? invoiceResponse ?? {};
   const [studentFeePage, setStudentFeePage] = useState(1);
   const studentsPerPage = 10;
-  const { data: studentsResponse, isFetching: isStudentsFetching } = useStudents({ page: studentFeePage, perPage: studentsPerPage, search: debouncedStudentSearch });
+  const { data: studentsResponse, isFetching: isStudentsFetching } = useStudents({ 
+    page: studentFeePage, 
+    perPage: studentsPerPage, 
+    search: debouncedStudentSearch,
+    hasFee: 'true'
+  });
   const rawStudents = studentsResponse?.data ?? [];
   const studentsMeta = studentsResponse?.meta ?? studentsResponse ?? {};
 
@@ -551,7 +556,7 @@ const FinancePage = ({ user, onSignOut }) => {
                   <UserCheck size={18} />
                   Assigned Student Fees
                   <span style={{ fontSize: '11px', fontWeight: '600', backgroundColor: '#eff6ff', color: 'var(--primary-brand)', padding: '2px 8px', borderRadius: '12px' }}>
-                    {assignedStudentFees.length} Students Assigned
+                    {studentsMeta.total ?? assignedStudentFees.length} Students Assigned
                   </span>
                 </h3>
                 <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>

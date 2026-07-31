@@ -102,12 +102,13 @@ export const dashboardService = {
   // ==========================================
   // 🗃️ Student Directory
   // ==========================================
-  async getStudents({ page = 1, perPage = 10, search = '', grade = '', routeId = '', status = '' } = {}) {
+  async getStudents({ page = 1, perPage = 10, search = '', grade = '', routeId = '', status = '', hasFee = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
     if (grade && grade !== 'All') params.set('grade', grade);
     if (routeId && routeId !== 'All') params.set('route_id', routeId);
     if (status && status !== 'All') params.set('status', status);
+    if (hasFee) params.set('has_fee', hasFee);
     const response = await fetch(`${API_URL}/students?${params}`, {
       method: 'GET',
       headers: getHeaders(),
