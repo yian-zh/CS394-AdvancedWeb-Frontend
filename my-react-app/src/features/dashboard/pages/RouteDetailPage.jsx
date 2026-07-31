@@ -1043,10 +1043,6 @@ const RouteDetailPage = ({ user, onSignOut, fleet, setFleet }) => {
             <Activity size={18} />
             Telemetry
           </Link>
-          <button type="button" className="sidebar-link">
-            <SlidersHorizontal size={18} />
-            Settings
-          </button>
         </nav>
 
         <div className="sidebar-footer">
