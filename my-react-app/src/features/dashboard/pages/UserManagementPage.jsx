@@ -4,7 +4,7 @@ import {
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, MapPin, CloudUpload,
   GraduationCap, AlertTriangle, DollarSign, Activity,
-  CheckCircle2, Ban
+  CheckCircle2, Ban, Loader2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -32,7 +32,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
     return '';
   }, [activeTab]);
 
-  const { data: usersResponse, isLoading, error } = useUsers({ 
+  const { data: usersResponse, isLoading, isFetching, error } = useUsers({ 
     page: currentPage, 
     perPage: itemsPerPage, 
     search: debouncedSearch,
@@ -325,6 +325,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              {isFetching && <Loader2 size={16} className="search-spinner" />}
             </div>
 
             <div className="top-navbar-profile">

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, X, MapPin, 
-  GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2, DollarSign, Activity
+  GraduationCap, ArrowRight, Clock, Pencil, Check, ChevronDown, Trash2, DollarSign, Activity, Loader2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -70,7 +70,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const { data: routesResponse, isLoading, error } = useRoutes({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
+  const { data: routesResponse, isLoading, isFetching, error } = useRoutes({ page: currentPage, perPage: itemsPerPage, search: debouncedSearch });
   const rawRoutes = routesResponse?.data ?? [];
   const routesMeta = routesResponse?.meta ?? routesResponse ?? {};
   const { data: busesResponse } = useBuses({ perPage: 200 });
@@ -405,6 +405,7 @@ const RouteLogisticsPage = ({ user, onSignOut }) => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: '8px' }}
               />
+              {isFetching && <Loader2 size={16} className="search-spinner" />}
             </div>
 
             <div className="top-navbar-actions">

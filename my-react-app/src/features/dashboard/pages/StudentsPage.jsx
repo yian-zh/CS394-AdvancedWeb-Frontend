@@ -35,7 +35,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   const [routeFilter, setRouteFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const { data: studentsResponse, isLoading, error } = useStudents({ 
+  const { data: studentsResponse, isLoading, isFetching, error } = useStudents({ 
     page: currentPage, 
     perPage: itemsPerPage, 
     search: debouncedSearch,
@@ -465,6 +465,7 @@ const StudentsPage = ({ user, onSignOut }) => {
                   setCurrentPage(1); // Reset page to 1 on search
                 }}
               />
+              {isFetching && <Loader2 size={16} className="search-spinner" />}
             </div>
 
             <div className="top-navbar-profile">

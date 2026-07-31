@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, Wrench, Calendar, AlertTriangle, MapPin,
-  GraduationCap, FileText, DollarSign, Activity
+  GraduationCap, FileText, DollarSign, Activity, Loader2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -24,7 +24,7 @@ const FleetManagementPage = ({ user, onSignOut }) => {
   const { data: busesResponse, isLoading: isBusesLoading, error: busesError } = useBuses({ page: busPage, perPage: itemsPerPage });
   const rawBuses = busesResponse?.data ?? [];
   const busesMeta = busesResponse?.meta ?? busesResponse ?? {};
-  const { data: maintResponse, isLoading: isMaintLoading, error: maintError } = usePendingMaintenance({ page: maintPage, perPage: itemsPerPage, search: debouncedSearch });
+  const { data: maintResponse, isLoading: isMaintLoading, isFetching: isMaintFetching, error: maintError } = usePendingMaintenance({ page: maintPage, perPage: itemsPerPage, search: debouncedSearch });
   const maintenanceData = maintResponse?.data ?? [];
   const maintMeta = maintResponse?.meta ?? maintResponse ?? {};
   
@@ -379,6 +379,7 @@ const FleetManagementPage = ({ user, onSignOut }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+              {isMaintFetching && <Loader2 size={16} className="search-spinner" />}
             </div>
 
             <div className="top-navbar-profile">

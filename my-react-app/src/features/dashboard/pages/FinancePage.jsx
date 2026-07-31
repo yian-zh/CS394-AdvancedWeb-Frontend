@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, 
-  GraduationCap, MapPin, DollarSign, Edit3, AlertCircle, CheckCircle2, UserCheck, Activity, Trash2
+  GraduationCap, MapPin, DollarSign, Edit3, AlertCircle, CheckCircle2, UserCheck, Activity, Trash2, Loader2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -36,12 +36,12 @@ const FinancePage = ({ user, onSignOut }) => {
   const { data: feeResponse, isLoading: isFeesLoading } = useFeeStructures({ page: feePage, perPage: feesPerPage });
   const rawFeeStructures = feeResponse?.data ?? [];
   const feeMeta = feeResponse?.meta ?? feeResponse ?? {};
-  const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage, search: debouncedSearch, status: statusFilter !== 'All' ? statusFilter : '' });
+  const { data: invoiceResponse, isLoading: isInvoicesLoading, isFetching: isInvoicesFetching } = useInvoices({ page: invoicePage, perPage: invoicesPerPage, search: debouncedSearch, status: statusFilter !== 'All' ? statusFilter : '' });
   const rawInvoices = invoiceResponse?.data ?? [];
   const invoiceMeta = invoiceResponse?.meta ?? invoiceResponse ?? {};
   const [studentFeePage, setStudentFeePage] = useState(1);
   const studentsPerPage = 10;
-  const { data: studentsResponse } = useStudents({ page: studentFeePage, perPage: studentsPerPage, search: debouncedStudentSearch });
+  const { data: studentsResponse, isFetching: isStudentsFetching } = useStudents({ page: studentFeePage, perPage: studentsPerPage, search: debouncedStudentSearch });
   const rawStudents = studentsResponse?.data ?? [];
   const studentsMeta = studentsResponse?.meta ?? studentsResponse ?? {};
 
@@ -487,6 +487,7 @@ const FinancePage = ({ user, onSignOut }) => {
                   setInvoicePage(1);
                 }}
               />
+              {isInvoicesFetching && <Loader2 size={16} className="search-spinner" />}
             </div>
 
             <div className="top-navbar-profile">
@@ -582,6 +583,7 @@ const FinancePage = ({ user, onSignOut }) => {
                       boxSizing: 'border-box'
                     }}
                   />
+                  {isStudentsFetching && <Loader2 size={16} className="search-spinner" />}
                 </div>
 
                 <button 
@@ -800,6 +802,7 @@ const FinancePage = ({ user, onSignOut }) => {
                         boxSizing: 'border-box'
                       }}
                     />
+                    {isInvoicesFetching && <Loader2 size={14} className="search-spinner" style={{ right: '8px', marginTop: '-7px' }} />}
                   </div>
 
                   <select

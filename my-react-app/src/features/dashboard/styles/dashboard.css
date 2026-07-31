@@ -161,6 +161,16 @@
   pointer-events: none;
 }
 
+.search-spinner {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  margin-top: -8px;
+  color: var(--primary-brand);
+  animation: ui-spin 0.8s linear infinite;
+  pointer-events: none;
+}
+
 .top-navbar-profile {
   display: flex;
   align-items: center;
