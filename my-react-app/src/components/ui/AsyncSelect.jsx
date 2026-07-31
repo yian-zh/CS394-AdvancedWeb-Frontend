@@ -25,23 +25,29 @@ export default function AsyncSelect({
 
   const safeGetLabel = useCallback((opt) => {
     if (!opt) return '';
+    if (typeof opt === 'string') return opt;
     try {
-      return getOptionLabel(opt) ?? '';
+      const res = getOptionLabel(opt);
+      if (res !== undefined && res !== null && res !== '') return res;
+      return opt.label || opt.name || String(opt.id ?? '');
     } catch {
-      return typeof opt === 'string' ? opt : (opt.name || opt.label || '');
+      return opt.label || opt.name || String(opt.id ?? '');
     }
   }, [getOptionLabel]);
 
   const safeGetValue = useCallback((opt) => {
     if (!opt) return '';
+    if (typeof opt === 'string' || typeof opt === 'number') return opt;
     try {
-      return getOptionValue(opt) ?? '';
+      const res = getOptionValue(opt);
+      if (res !== undefined && res !== null && res !== '') return res;
+      return opt.id ?? opt.value ?? opt;
     } catch {
-      return typeof opt === 'string' ? opt : (opt.id || opt.value || opt);
+      return opt.id ?? opt.value ?? opt;
     }
   }, [getOptionValue]);
 
-  const selectedLabel = value ? (typeof value === 'string' ? value : safeGetLabel(value)) : '';
+  const selectedLabel = value ? safeGetLabel(value) : '';
 
   useEffect(() => {
     let isMounted = true;

@@ -40,6 +40,18 @@ export const useAssignFeeStructure = () => {
   });
 };
 
+export const useUnassignFeeStructure = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: dashboardService.unassignFeeStructure,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feeStructures'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+    },
+  });
+};
+
 export const useInvoices = ({ page = 1, perPage = 10, search = '' } = {}) => {
   return useQuery({
     queryKey: ['invoices', { page, perPage, search }],

@@ -327,6 +327,14 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
+  async unassignFeeStructure(studentId) {
+    const response = await fetch(`${API_URL}/billing/unassign-fee/${studentId}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    return handleResponse(response);
+  },
+
   async getInvoices({ page = 1, perPage = 10, search = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);

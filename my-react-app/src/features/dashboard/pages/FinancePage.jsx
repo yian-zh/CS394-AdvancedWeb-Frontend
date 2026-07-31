@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, 
-  GraduationCap, MapPin, DollarSign, Edit3, AlertCircle, CheckCircle2, UserCheck, Activity
+  GraduationCap, MapPin, DollarSign, Edit3, AlertCircle, CheckCircle2, UserCheck, Activity, Trash2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -12,7 +12,7 @@ import Pagination from '../../../components/ui/Pagination';
 import AsyncSelect from '../../../components/ui/AsyncSelect';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { dashboardService } from '../services/dashboardService';
-import { useFeeStructures, useCreateFeeStructure, useUpdateFeeStructure, useAssignFeeStructure, useInvoices, useGenerateInvoices, useUpdateInvoiceStatus, useRecordPayment } from '../hooks/useFinance';
+import { useFeeStructures, useCreateFeeStructure, useUpdateFeeStructure, useAssignFeeStructure, useUnassignFeeStructure, useInvoices, useGenerateInvoices, useUpdateInvoiceStatus, useRecordPayment } from '../hooks/useFinance';
 import { useStudents } from '../hooks/useStudents';
 import '../styles/dashboard.css';
 
@@ -44,9 +44,28 @@ const FinancePage = ({ user, onSignOut }) => {
   const createFeeMutation = useCreateFeeStructure();
   const updateFeeMutation = useUpdateFeeStructure();
   const assignFeeMutation = useAssignFeeStructure();
+  const unassignFeeMutation = useUnassignFeeStructure();
   const generateInvoicesMutation = useGenerateInvoices();
   const updateInvoiceStatusMutation = useUpdateInvoiceStatus();
   const recordPaymentMutation = useRecordPayment();
+
+  const handleUnassignFee = async (studentId, studentName) => {
+    if (!window.confirm(`Are you sure you want to remove the assigned fee structure from "${studentName}"?`)) {
+      return;
+    }
+    try {
+      await unassignFeeMutation.mutateAsync(studentId);
+      setNotification({
+        type: 'success',
+        message: `Removed fee structure assignment for student "${studentName}".`
+      });
+    } catch (err) {
+      setNotification({
+        type: 'error',
+        message: err.message || 'Failed to remove fee structure assignment.'
+      });
+    }
+  };
 
   const fetchStudents = useCallback(async (search) => {
     const data = await dashboardService.getStudents({ search, perPage: 20 });
@@ -291,7 +310,7 @@ const FinancePage = ({ user, onSignOut }) => {
         message: `Assigned "${feeNameStr}" to student "${studentName}"${guardianStr ? ` (Guardian: ${guardianStr})` : ''} successfully!`
       });
       setIsAssignModalOpen(false);
-      setSelectedStudentId('');
+      setSelectedStudentId(null);
       setSelectedFeeId('');
       setAssignFormErrors({});
     } catch (err) {
@@ -544,7 +563,12 @@ const FinancePage = ({ user, onSignOut }) => {
                 <button 
                   type="button" 
                   className="action-btn"
-                  onClick={() => setIsAssignModalOpen(true)}
+                  onClick={() => {
+                    setSelectedStudentId(null);
+                    setSelectedFeeId('');
+                    setAssignFormErrors({});
+                    setIsAssignModalOpen(true);
+                  }}
                   style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ffffff' }}
                 >
                   <Plus size={16} />
@@ -613,6 +637,17 @@ const FinancePage = ({ user, onSignOut }) => {
                             title="Change or Edit Fee Structure for this Student"
                           >
                             <Edit3 size={11} /> Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            className="action-btn"
+                            style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', borderColor: '#fca5a5' }}
+                            onClick={() => handleUnassignFee(row.student_id, row.student_name)}
+                            disabled={unassignFeeMutation.isPending}
+                            title="Remove Fee Structure assignment from this Student"
+                          >
+                            <Trash2 size={11} /> Remove
                           </button>
                         </div>
                       </td>
@@ -978,9 +1013,9 @@ const FinancePage = ({ user, onSignOut }) => {
                   placeholder="Type student name..."
                   fetchOptions={fetchStudents}
                   value={selectedStudentId}
-                  onChange={(opt) => setSelectedStudentId(opt?.student_id || opt?.id || '')}
-                  getOptionLabel={(opt) => opt.label}
-                  getOptionValue={(opt) => opt.id}
+                  onChange={(opt) => setSelectedStudentId(opt)}
+                  getOptionLabel={(opt) => opt?.label || ''}
+                  getOptionValue={(opt) => opt?.id || ''}
                   error={assignFormErrors.studentId}
                 />
 
