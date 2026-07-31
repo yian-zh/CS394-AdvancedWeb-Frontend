@@ -29,6 +29,9 @@ const FinancePage = ({ user, onSignOut }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const debouncedStudentSearch = useDebounce(studentSearchQuery, 300);
+
   const { data: feeResponse, isLoading: isFeesLoading } = useFeeStructures({ page: feePage, perPage: feesPerPage });
   const rawFeeStructures = feeResponse?.data ?? [];
   const feeMeta = feeResponse?.meta ?? feeResponse ?? {};
@@ -37,7 +40,7 @@ const FinancePage = ({ user, onSignOut }) => {
   const invoiceMeta = invoiceResponse?.meta ?? invoiceResponse ?? {};
   const [studentFeePage, setStudentFeePage] = useState(1);
   const studentsPerPage = 10;
-  const { data: studentsResponse } = useStudents({ page: studentFeePage, perPage: studentsPerPage });
+  const { data: studentsResponse } = useStudents({ page: studentFeePage, perPage: studentsPerPage, search: debouncedStudentSearch });
   const rawStudents = studentsResponse?.data ?? [];
   const studentsMeta = studentsResponse?.meta ?? studentsResponse ?? {};
 
@@ -539,7 +542,7 @@ const FinancePage = ({ user, onSignOut }) => {
                   <UserCheck size={18} />
                   Assigned Student Fees
                   <span style={{ fontSize: '11px', fontWeight: '600', backgroundColor: '#eff6ff', color: 'var(--primary-brand)', padding: '2px 8px', borderRadius: '12px' }}>
-                    {assignedStudentFees.length} Students Assigned
+                    {studentsMeta.total ?? assignedStudentFees.length} Students Assigned
                   </span>
                 </h3>
                 <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>
@@ -547,8 +550,21 @@ const FinancePage = ({ user, onSignOut }) => {
                 </p>
               </div>
 
-              {/* BUTTONS ON TOP OF ASSIGNED FEES TABLE */}
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {/* SEARCH & BUTTONS ON TOP OF ASSIGNED FEES TABLE */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="top-navbar-search" style={{ margin: 0, height: '36px', minWidth: '220px', maxWidth: '280px' }}>
+                  <Search size={16} className="search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search assigned student..."
+                    value={studentSearchQuery}
+                    onChange={(e) => {
+                      setStudentSearchQuery(e.target.value);
+                      setStudentFeePage(1);
+                    }}
+                  />
+                </div>
+
                 <button 
                   type="button" 
                   className="add-user-btn"
