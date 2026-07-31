@@ -22,13 +22,14 @@ const UserManagementPage = ({ user, onSignOut }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  const [activeTab, setActiveTab] = useState('Drivers');
+  const [activeTab, setActiveTab] = useState('All Users');
   const [statusFilter, setStatusFilter] = useState('All');
 
   const targetRole = useMemo(() => {
     if (activeTab === 'Guardians') return 'guardian';
     if (activeTab === 'Administrators') return 'admin';
-    return 'driver';
+    if (activeTab === 'Drivers') return 'driver';
+    return '';
   }, [activeTab]);
 
   const { data: usersResponse, isLoading, error } = useUsers({ 
@@ -356,7 +357,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
           {/* Filtering row */}
           <div className="filters-row">
             <div className="filter-tabs" role="tablist">
-              {['Drivers', 'Guardians', 'Administrators'].map((tab) => (
+              {['All Users', 'Drivers', 'Guardians', 'Administrators'].map((tab) => (
                 <button
                   key={tab}
                   type="button"
