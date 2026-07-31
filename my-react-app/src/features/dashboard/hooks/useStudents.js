@@ -2,12 +2,12 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dashboardService } from '../services/dashboardService';
 
-export const useStudents = ({ page = 1, perPage = 10, search = '', grade = '', routeId = '' } = {}) => {
+export const useStudents = ({ page = 1, perPage = 10, search = '', grade = '', routeId = '', status = '' } = {}) => {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['students', { page, perPage, search, grade, routeId }],
-    queryFn: () => dashboardService.getStudents({ page, perPage, search, grade, routeId }),
+    queryKey: ['students', { page, perPage, search, grade, routeId, status }],
+    queryFn: () => dashboardService.getStudents({ page, perPage, search, grade, routeId, status }),
   });
 
   // Prefetch next page (page + 1) in the background when current page query succeeds
@@ -15,11 +15,11 @@ export const useStudents = ({ page = 1, perPage = 10, search = '', grade = '', r
     const lastPage = query.data?.last_page || query.data?.meta?.last_page;
     if (lastPage && page < lastPage) {
       queryClient.prefetchQuery({
-        queryKey: ['students', { page: page + 1, perPage, search, grade, routeId }],
-        queryFn: () => dashboardService.getStudents({ page: page + 1, perPage, search, grade, routeId }),
+        queryKey: ['students', { page: page + 1, perPage, search, grade, routeId, status }],
+        queryFn: () => dashboardService.getStudents({ page: page + 1, perPage, search, grade, routeId, status }),
       });
     }
-  }, [query.data, page, perPage, search, grade, routeId, queryClient]);
+  }, [query.data, page, perPage, search, grade, routeId, status, queryClient]);
 
   return query;
 };
@@ -39,6 +39,17 @@ export const useUpdateStudent = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, studentData }) => dashboardService.updateStudent(id, studentData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['students'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+};
+
+export const useToggleStudentStatus = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => dashboardService.toggleStudentStatus(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['students'] });
       queryClient.invalidateQueries({ queryKey: ['users'] });

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, 
-  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign, Activity
+  GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign, Activity, Ban
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
@@ -11,7 +11,7 @@ import Input from '../../../components/ui/Input';
 import Pagination from '../../../components/ui/Pagination';
 import AsyncSelect from '../../../components/ui/AsyncSelect';
 import { useDebounce } from '../../../hooks/useDebounce';
-import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent } from '../hooks/useStudents';
+import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent, useToggleStudentStatus } from '../hooks/useStudents';
 import { dashboardService } from '../services/dashboardService';
 import { useRoutes } from '../hooks/useRoutes';
 import '../styles/dashboard.css';
@@ -33,13 +33,15 @@ const StudentsPage = ({ user, onSignOut }) => {
 
   const [gradeFilter, setGradeFilter] = useState('All');
   const [routeFilter, setRouteFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
 
   const { data: studentsResponse, isLoading, error } = useStudents({ 
     page: currentPage, 
     perPage: itemsPerPage, 
     search: debouncedSearch,
     grade: gradeFilter,
-    routeId: routeFilter
+    routeId: routeFilter,
+    status: statusFilter
   });
   const rawStudents = studentsResponse?.data ?? [];
   const studentsMeta = studentsResponse?.meta ?? {
@@ -54,6 +56,11 @@ const StudentsPage = ({ user, onSignOut }) => {
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
   const deleteStudentMutation = useDeleteStudent();
+  const toggleStudentStatusMutation = useToggleStudentStatus();
+
+  // Suspend Confirmation Modal State
+  const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
+  const [studentToSuspend, setStudentToSuspend] = useState(null);
   
   const students = useMemo(() => {
     return rawStudents.map(s => {
@@ -79,7 +86,8 @@ const StudentsPage = ({ user, onSignOut }) => {
         assignedRoute: assignedRouteStr,
         gender: s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : 'Male',
         phone: guardianPhoneStr || 'N/A',
-        isActive: true,
+        status: s.enrollment_status || 'Enrolled',
+        isSuspended: String(s.enrollment_status || '').toLowerCase() === 'suspended' || String(s.enrollment_status || '').toLowerCase() === 'inactive',
       };
     });
   }, [rawStudents]);
@@ -625,6 +633,17 @@ const StudentsPage = ({ user, onSignOut }) => {
                   })}
                 </select>
 
+                <select 
+                  className="select-input" 
+                  style={{ padding: '6px 28px 6px 12px', fontSize: '13px', width: '140px', height: '36px' }}
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Enrolled">Enrolled</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+
                 <button type="button" className="action-btn" onClick={() => alert('Exporting student directory CSV...')}>
                   <Download size={14} />
                   Export
@@ -643,6 +662,7 @@ const StudentsPage = ({ user, onSignOut }) => {
                     <th>Student Name</th>
                     <th>Guardian Name</th>
                     <th>Grade</th>
+                    <th>Status</th>
                     <th>Assigned Route</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -650,26 +670,26 @@ const StudentsPage = ({ user, onSignOut }) => {
                  <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
                         <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
                         <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading students...</span>
                       </td>
                     </tr>
                   ) : error ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
                         Error loading students: {error.message || String(error)}
                       </td>
                     </tr>
                   ) : filteredStudents.length > 0 ? (
                     filteredStudents.map((s) => (
-                      <tr key={s.id}>
+                      <tr key={s.id} className={s.isSuspended ? 'is-inactive' : ''}>
                         <td style={{ fontWeight: '600', color: 'var(--primary-brand)', fontSize: '13px' }}>
                           {s.id}
                         </td>
                         <td>
                           <div className="user-cell">
-                            <div className="user-avatar-circle" style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}>
+                            <div className="user-avatar-circle" style={{ backgroundColor: s.isSuspended ? '#fee2e2' : '#dbeafe', color: s.isSuspended ? '#dc2626' : '#1e40af' }}>
                               {getInitials(s.name)}
                             </div>
                             <div className="user-info">
@@ -686,12 +706,65 @@ const StudentsPage = ({ user, onSignOut }) => {
                           </span>
                         </td>
                         <td>
+                          {s.isSuspended ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#fee2e2',
+                              color: '#dc2626',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}>
+                              <Ban size={12} /> Suspended
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}>
+                              <CheckCircle2 size={12} /> Enrolled
+                            </span>
+                          )}
+                        </td>
+                        <td>
                           <span className={`role-badge ${getRouteClass(s.assignedRoute)}`}>
                             {s.assignedRoute}
                           </span>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              className="action-btn"
+                              style={{
+                                padding: '4px 8px',
+                                height: '32px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                borderColor: s.isSuspended ? '#bbf7d0' : '#fecdd3',
+                                color: s.isSuspended ? '#16a34a' : '#e11d48',
+                                backgroundColor: s.isSuspended ? '#f0fdf4' : '#fff1f2'
+                              }}
+                              onClick={() => { setStudentToSuspend(s); setIsSuspendModalOpen(true); }}
+                              title={s.isSuspended ? "Reinstate Student" : "Suspend Student"}
+                            >
+                              {s.isSuspended ? <CheckCircle2 size={13} /> : <Ban size={13} />}
+                              {s.isSuspended ? 'Reinstate' : 'Suspend'}
+                            </button>
+
                             <button
                               type="button"
                               className="action-btn"
@@ -716,7 +789,7 @@ const StudentsPage = ({ user, onSignOut }) => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--icon-color)' }}>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '32px', color: 'var(--icon-color)' }}>
                         No students found matching filters or search queries.
                       </td>
                     </tr>
@@ -909,6 +982,70 @@ const StudentsPage = ({ user, onSignOut }) => {
                 }}
               >
                 {deleteStudentMutation.isPending ? 'Deleting...' : 'Delete Student'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Student Suspend / Reinstate Confirmation Modal */}
+      {isSuspendModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-container" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ color: studentToSuspend?.isSuspended ? '#16a34a' : '#e11d48', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {studentToSuspend?.isSuspended ? <CheckCircle2 size={20} /> : <Ban size={20} />}
+                {studentToSuspend?.isSuspended ? 'Reinstate Student' : 'Suspend Student'}
+              </h2>
+            </div>
+            <div style={{ padding: '20px 0', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}>
+              Are you sure you want to {studentToSuspend?.isSuspended ? 'reinstate' : 'suspend'}{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {studentToSuspend?.name || 'this student'}
+              </strong>
+              ?
+              {!studentToSuspend?.isSuspended && (
+                <div style={{ marginTop: '10px', fontSize: '13px', color: '#dc2626', backgroundColor: '#fee2e2', padding: '10px 12px', borderRadius: '6px' }}>
+                  <strong>Notice:</strong> Suspending this student will flag them as Suspended on driver attendance rosters, pause live telemetry tracking, and reflect across guardian apps.
+                </div>
+              )}
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setIsSuspendModalOpen(false); setStudentToSuspend(null); }}
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!studentToSuspend) return;
+                  try {
+                    await toggleStudentStatusMutation.mutateAsync(studentToSuspend.id);
+                  } catch (err) {
+                    console.warn('Toggle student status error:', err);
+                  } finally {
+                    setStudentToSuspend(null);
+                    setIsSuspendModalOpen(false);
+                  }
+                }}
+                disabled={toggleStudentStatusMutation.isPending}
+                style={{
+                  padding: '8px 20px',
+                  background: studentToSuspend?.isSuspended ? '#16a34a' : '#e11d48',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: toggleStudentStatusMutation.isPending ? 'not-allowed' : 'pointer',
+                  opacity: toggleStudentStatusMutation.isPending ? 0.7 : 1,
+                }}
+              >
+                {toggleStudentStatusMutation.isPending 
+                  ? 'Updating...' 
+                  : (studentToSuspend?.isSuspended ? 'Reinstate Student' : 'Suspend Student')}
               </button>
             </div>
           </div>

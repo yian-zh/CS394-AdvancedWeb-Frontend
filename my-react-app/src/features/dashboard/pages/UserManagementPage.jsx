@@ -3,14 +3,15 @@ import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
   SlidersHorizontal, Download, X, MapPin, CloudUpload,
-  GraduationCap, AlertTriangle, DollarSign, Activity
+  GraduationCap, AlertTriangle, DollarSign, Activity,
+  CheckCircle2, Ban
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
 import Card from '../../../components/ui/Card';
 import Input from '../../../components/ui/Input';
 import Pagination from '../../../components/ui/Pagination';
 import { useDebounce } from '../../../hooks/useDebounce';
-import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useToggleUserStatus } from '../hooks/useUsers';
 import { Edit3 } from 'lucide-react';
 import '../styles/dashboard.css';
 
@@ -22,6 +23,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   const [activeTab, setActiveTab] = useState('Drivers');
+  const [statusFilter, setStatusFilter] = useState('All');
 
   const targetRole = useMemo(() => {
     if (activeTab === 'Guardians') return 'guardian';
@@ -33,16 +35,22 @@ const UserManagementPage = ({ user, onSignOut }) => {
     page: currentPage, 
     perPage: itemsPerPage, 
     search: debouncedSearch,
-    role: targetRole
+    role: targetRole,
+    status: statusFilter
   });
   const rawUsers = usersResponse?.data ?? [];
   const paginationMeta = usersResponse?.meta ?? usersResponse ?? {};
   const createUserMutation = useCreateUser();
   const updateUserMutation = useUpdateUser();
   const deleteUserMutation = useDeleteUser();
+  const toggleUserStatusMutation = useToggleUserStatus();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit'
   const [selectedUserIdToEdit, setSelectedUserIdToEdit] = useState(null);
+
+  // Suspend Confirmation State
+  const [isSuspendModalOpen, setIsSuspendModalOpen] = useState(false);
+  const [userToSuspend, setUserToSuspend] = useState(null);
 
   // Delete Confirmation State
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
@@ -370,11 +378,18 @@ const UserManagementPage = ({ user, onSignOut }) => {
             </div>
 
             <div className="filters-actions">
-              <button type="button" className="action-btn">
-                <SlidersHorizontal size={14} />
-                Filter
-              </button>
-              <button type="button" className="action-btn">
+              <select
+                className="select-input"
+                style={{ padding: '6px 28px 6px 12px', fontSize: '13px', width: '140px', height: '36px' }}
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+              >
+                <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Suspended">Suspended</option>
+              </select>
+
+              <button type="button" className="action-btn" onClick={() => alert('Exporting users directory CSV...')}>
                 <Download size={14} />
                 Export
               </button>
@@ -390,6 +405,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
                     <th>User</th>
                     <th>Role</th>
                     <th>Contact</th>
+                    <th>Status</th>
                     <th>Assignment</th>
                     <th style={{ textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -397,14 +413,14 @@ const UserManagementPage = ({ user, onSignOut }) => {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--primary-brand)' }}>
                         <div className="ui-button-spinner" style={{ display: 'inline-block', borderTopColor: 'var(--primary-brand)', borderRightColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: 'transparent' }} />
                         <span style={{ marginLeft: '8px', verticalAlign: 'middle' }}>Loading users...</span>
                       </td>
                     </tr>
                   ) : error ? (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: '#dc2626' }}>
                         Error loading users: {error.message || String(error)}
                       </td>
                     </tr>
@@ -432,6 +448,37 @@ const UserManagementPage = ({ user, onSignOut }) => {
                             <span className="contact-email">{u.email}</span>
                             <span className="contact-phone">{u.phone}</span>
                           </div>
+                        </td>
+                        <td>
+                          {u.isActive ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#dcfce7',
+                              color: '#15803d',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}>
+                              <CheckCircle2 size={12} /> Active
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '2px 8px',
+                              borderRadius: '9999px',
+                              backgroundColor: '#fee2e2',
+                              color: '#dc2626',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}>
+                              <Ban size={12} /> Suspended
+                            </span>
+                          )}
                         </td>
                         <td>
                           <div className="assignment-cell">
@@ -467,6 +514,30 @@ const UserManagementPage = ({ user, onSignOut }) => {
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
                             <button
                               type="button"
+                              onClick={() => { setUserToSuspend(u); setIsSuspendModalOpen(true); }}
+                              disabled={toggleUserStatusMutation.isPending}
+                              style={{
+                                background: u.isActive ? '#fff1f2' : '#f0fdf4',
+                                border: `1px solid ${u.isActive ? '#fecdd3' : '#bbf7d0'}`,
+                                borderRadius: '6px',
+                                color: u.isActive ? '#e11d48' : '#16a34a',
+                                cursor: 'pointer',
+                                padding: '4px 10px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                transition: 'all 0.15s'
+                              }}
+                              title={u.isActive ? "Suspend User Account" : "Activate User Account"}
+                            >
+                              {u.isActive ? <Ban size={13} /> : <CheckCircle2 size={13} />}
+                              {u.isActive ? 'Suspend' : 'Activate'}
+                            </button>
+
+                            <button
+                              type="button"
                               className="action-btn"
                               onClick={() => openEditModal(u)}
                               style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
@@ -498,7 +569,7 @@ const UserManagementPage = ({ user, onSignOut }) => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '32px', color: 'var(--icon-color)' }}>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '32px', color: 'var(--icon-color)' }}>
                         No users found matching the search query or filter.
                       </td>
                     </tr>
@@ -710,6 +781,70 @@ const UserManagementPage = ({ user, onSignOut }) => {
                 }}
               >
                 {deleteUserMutation.isPending ? 'Deleting...' : 'Delete User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suspend / Activate Confirmation Modal */}
+      {isSuspendModalOpen && (
+        <div className="modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="modal-container" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ color: userToSuspend?.isActive ? '#e11d48' : '#16a34a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {userToSuspend?.isActive ? <Ban size={20} /> : <CheckCircle2 size={20} />}
+                {userToSuspend?.isActive ? 'Suspend User Account' : 'Activate User Account'}
+              </h2>
+            </div>
+            <div style={{ padding: '20px 0', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}>
+              Are you sure you want to {userToSuspend?.isActive ? 'suspend' : 'activate'}{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {userToSuspend?.name || 'this user'}
+              </strong>
+              ?
+              {userToSuspend?.isActive && (
+                <div style={{ marginTop: '10px', fontSize: '13px', color: '#dc2626', backgroundColor: '#fee2e2', padding: '10px 12px', borderRadius: '6px' }}>
+                  <strong>Notice:</strong> Suspending this account will immediately revoke all active login sessions and block API access across Redis.
+                </div>
+              )}
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setIsSuspendModalOpen(false); setUserToSuspend(null); }}
+              >
+                Cancel
+              </Button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!userToSuspend) return;
+                  try {
+                    await toggleUserStatusMutation.mutateAsync(userToSuspend.id);
+                  } catch (err) {
+                    console.warn('Toggle user status error:', err);
+                  } finally {
+                    setUserToSuspend(null);
+                    setIsSuspendModalOpen(false);
+                  }
+                }}
+                disabled={toggleUserStatusMutation.isPending}
+                style={{
+                  padding: '8px 20px',
+                  background: userToSuspend?.isActive ? '#e11d48' : '#16a34a',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: toggleUserStatusMutation.isPending ? 'not-allowed' : 'pointer',
+                  opacity: toggleUserStatusMutation.isPending ? 0.7 : 1,
+                }}
+              >
+                {toggleUserStatusMutation.isPending 
+                  ? 'Updating...' 
+                  : (userToSuspend?.isActive ? 'Suspend Account' : 'Activate Account')}
               </button>
             </div>
           </div>

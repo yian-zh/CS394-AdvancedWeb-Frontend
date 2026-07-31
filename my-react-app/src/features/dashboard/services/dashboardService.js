@@ -53,10 +53,11 @@ export const dashboardService = {
   // ==========================================
   // 👥 User Management
   // ==========================================
-  async getUsers({ page = 1, perPage = 10, search = '', role = '' } = {}) {
+  async getUsers({ page = 1, perPage = 10, search = '', role = '', status = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
-    if (role) params.set('role', role);
+    if (role && role !== 'All Users' && role !== 'All') params.set('role', role);
+    if (status && status !== 'All') params.set('status', status);
     const response = await fetch(`${API_URL}/users?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -101,11 +102,12 @@ export const dashboardService = {
   // ==========================================
   // 🗃️ Student Directory
   // ==========================================
-  async getStudents({ page = 1, perPage = 10, search = '', grade = '', routeId = '' } = {}) {
+  async getStudents({ page = 1, perPage = 10, search = '', grade = '', routeId = '', status = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
     if (grade && grade !== 'All') params.set('grade', grade);
     if (routeId && routeId !== 'All') params.set('route_id', routeId);
+    if (status && status !== 'All') params.set('status', status);
     const response = await fetch(`${API_URL}/students?${params}`, {
       method: 'GET',
       headers: getHeaders(),
@@ -127,6 +129,14 @@ export const dashboardService = {
       method: 'PUT',
       headers: getHeaders(),
       body: JSON.stringify(studentData),
+    });
+    return handleResponse(response);
+  },
+
+  async toggleStudentStatus(id) {
+    const response = await fetch(`${API_URL}/students/${id}/toggle-status`, {
+      method: 'PATCH',
+      headers: getHeaders(),
     });
     return handleResponse(response);
   },
