@@ -52,10 +52,10 @@ export const useUnassignFeeStructure = () => {
   });
 };
 
-export const useInvoices = ({ page = 1, perPage = 10, search = '' } = {}) => {
+export const useInvoices = ({ page = 1, perPage = 10, search = '', status = '' } = {}) => {
   return useQuery({
-    queryKey: ['invoices', { page, perPage, search }],
-    queryFn: () => dashboardService.getInvoices({ page, perPage, search }),
+    queryKey: ['invoices', { page, perPage, search, status }],
+    queryFn: () => dashboardService.getInvoices({ page, perPage, search, status }),
   });
 };
 

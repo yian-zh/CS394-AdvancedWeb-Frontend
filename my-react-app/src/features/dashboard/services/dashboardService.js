@@ -335,9 +335,10 @@ export const dashboardService = {
     return handleResponse(response);
   },
 
-  async getInvoices({ page = 1, perPage = 10, search = '' } = {}) {
+  async getInvoices({ page = 1, perPage = 10, search = '', status = '' } = {}) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (search) params.set('search', search);
+    if (status && status !== 'All') params.set('status', status);
     const response = await fetch(`${API_URL}/billing/invoices?${params}`, {
       method: 'GET',
       headers: getHeaders(),

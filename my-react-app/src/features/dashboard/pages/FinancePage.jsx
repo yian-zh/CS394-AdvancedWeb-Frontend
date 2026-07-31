@@ -25,9 +25,10 @@ const FinancePage = ({ user, onSignOut }) => {
   const feesPerPage = 10;
   const invoicesPerPage = 5;
 
-  // Search state (must be before hooks that use debouncedSearch)
+  // Search & Filter state for Ledger & Invoices
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
+  const [statusFilter, setStatusFilter] = useState('All');
 
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const debouncedStudentSearch = useDebounce(studentSearchQuery, 300);
@@ -35,7 +36,7 @@ const FinancePage = ({ user, onSignOut }) => {
   const { data: feeResponse, isLoading: isFeesLoading } = useFeeStructures({ page: feePage, perPage: feesPerPage });
   const rawFeeStructures = feeResponse?.data ?? [];
   const feeMeta = feeResponse?.meta ?? feeResponse ?? {};
-  const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage, search: debouncedSearch });
+  const { data: invoiceResponse, isLoading: isInvoicesLoading } = useInvoices({ page: invoicePage, perPage: invoicesPerPage, search: debouncedSearch, status: statusFilter !== 'All' ? statusFilter : '' });
   const rawInvoices = invoiceResponse?.data ?? [];
   const invoiceMeta = invoiceResponse?.meta ?? invoiceResponse ?? {};
   const [studentFeePage, setStudentFeePage] = useState(1);
@@ -102,7 +103,6 @@ const FinancePage = ({ user, onSignOut }) => {
       });
     }
   };
-  const [statusFilter, setStatusFilter] = useState('All');
 
   // Modals state
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
@@ -228,13 +228,8 @@ const FinancePage = ({ user, onSignOut }) => {
     return [];
   }, [rawInvoices, rawStudents, feeStructures, assignedStudentFees]);
 
-  // Filtered Ledger (by status only; search is handled server-side)
-  const filteredLedger = useMemo(() => {
-    return ledger.filter((item) => {
-      const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
-      return matchesStatus;
-    });
-  }, [ledger, statusFilter]);
+  // Ledger records (search and status filtering are fully handled server-side via API)
+  const filteredLedger = ledger;
 
   // Handlers
   const handleCreateFeeSubmit = async (e) => {
@@ -552,8 +547,8 @@ const FinancePage = ({ user, onSignOut }) => {
 
               {/* SEARCH & BUTTONS ON TOP OF ASSIGNED FEES TABLE */}
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div className="top-navbar-search" style={{ margin: 0, height: '36px', minWidth: '220px', maxWidth: '280px' }}>
-                  <Search size={16} className="search-icon" />
+                <div style={{ position: 'relative', width: '220px', display: 'flex', alignItems: 'center' }}>
+                  <Search size={15} style={{ position: 'absolute', left: '10px', color: '#64748b', pointerEvents: 'none' }} />
                   <input
                     type="text"
                     placeholder="Search assigned student..."
@@ -561,6 +556,17 @@ const FinancePage = ({ user, onSignOut }) => {
                     onChange={(e) => {
                       setStudentSearchQuery(e.target.value);
                       setStudentFeePage(1);
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '36px',
+                      padding: '0 12px 0 32px',
+                      fontSize: '13px',
+                      borderRadius: '8px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#ffffff',
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
                   />
                 </div>
@@ -570,7 +576,7 @@ const FinancePage = ({ user, onSignOut }) => {
                   className="add-user-btn"
                   onClick={handleGenerateInvoices}
                   disabled={generateInvoicesMutation.isPending}
-                  style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                 >
                   <DollarSign size={16} />
                   {generateInvoicesMutation.isPending ? 'Generating Invoices...' : 'Generate Invoices'}
@@ -585,7 +591,7 @@ const FinancePage = ({ user, onSignOut }) => {
                     setAssignFormErrors({});
                     setIsAssignModalOpen(true);
                   }}
-                  style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ffffff' }}
+                  style={{ height: '36px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#ffffff', whiteSpace: 'nowrap' }}
                 >
                   <Plus size={16} />
                   Assign Fee to Student
@@ -755,10 +761,34 @@ const FinancePage = ({ user, onSignOut }) => {
 
             {/* RIGHT CARD: Recent Payments Ledger */}
             <Card style={{ padding: '0', overflow: 'hidden' }}>
-              <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '10px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-brand)', margin: 0 }}>Recent Payments Ledger</h3>
                 
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', width: '180px', display: 'flex', alignItems: 'center' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', color: '#64748b', pointerEvents: 'none' }} />
+                    <input
+                      type="text"
+                      placeholder="Search ledger..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setInvoicePage(1);
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '32px',
+                        padding: '0 10px 0 30px',
+                        fontSize: '12px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: '#ffffff',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+
                   <select
                     className="select-input"
                     style={{ padding: '6px 24px 6px 10px', fontSize: '12px', height: '32px', width: '120px' }}
