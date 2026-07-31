@@ -82,11 +82,14 @@ const StudentsPage = ({ user, onSignOut }) => {
         ? (latestStop.route_name || latestStop.name || `Route #${latestStop.route_id || latestStop.id}`) 
         : 'Unassigned';
 
+      const relationshipTypeStr = primaryGuardian?.pivot?.relationship_type || primaryGuardian?.relationship_type || primaryGuardian?.pivot?.relationship || primaryGuardian?.relationship || 'Parent';
+
       return {
         id: String(s.student_id),
         name: `${s.first_name} ${s.last_name}`,
         guardianName: guardianNameStr,
         guardianId,
+        relationshipType: relationshipTypeStr,
         grade: s.grade_level || 'Grade 10',
         assignedRoute: assignedRouteStr,
         gender: s.gender ? (s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : 'Male',
@@ -137,6 +140,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [guardianName, setGuardianName] = useState('');
+  const [relationshipType, setRelationshipType] = useState('Parent');
   const [grade, setGrade] = useState('Grade 10');
   const [assignedRoute, setAssignedRoute] = useState('Unassigned');
   const [gender, setGender] = useState('Male');
@@ -214,6 +218,7 @@ const StudentsPage = ({ user, onSignOut }) => {
     setFirstName('');
     setLastName('');
     setGuardianName('');
+    setRelationshipType('Parent');
     setGrade('Grade 10');
     setAssignedRoute('Unassigned');
     setGender('Male');
@@ -232,6 +237,7 @@ const StudentsPage = ({ user, onSignOut }) => {
     const fName = names[0] || '';
     const lName = names.slice(1).join(' ') || '';
     const gName = student.guardianName || '';
+    const relType = student.relationshipType || 'Parent';
     const gr = student.grade || 'Grade 10';
     const route = student.assignedRoute || 'Unassigned';
     const gnd = student.gender || 'Male';
@@ -240,6 +246,7 @@ const StudentsPage = ({ user, onSignOut }) => {
     setFirstName(fName);
     setLastName(lName);
     setGuardianName(gName);
+    setRelationshipType(relType);
     setGrade(gr);
     setAssignedRoute(route);
     setGender(gnd);
@@ -251,6 +258,7 @@ const StudentsPage = ({ user, onSignOut }) => {
       firstName: fName,
       lastName: lName,
       guardianName: gName,
+      relationshipType: relType,
       grade: gr,
       assignedRoute: route,
       gender: gnd,
@@ -302,6 +310,7 @@ const StudentsPage = ({ user, onSignOut }) => {
           await assignGuardianMutation.mutateAsync({
             student_id: parseInt(newStudentId, 10),
             guardian_id: parseInt(guardianUserId, 10),
+            relationship_type: relationshipType || 'Parent',
           });
         }
         setNotificationBanner({
@@ -321,6 +330,7 @@ const StudentsPage = ({ user, onSignOut }) => {
           await assignGuardianMutation.mutateAsync({
             student_id: parseInt(selectedStudentId, 10),
             guardian_id: parseInt(guardianUserId, 10),
+            relationship_type: relationshipType || 'Parent',
           });
         }
 
@@ -341,6 +351,9 @@ const StudentsPage = ({ user, onSignOut }) => {
           }
           if (initialFormState.guardianName !== guardianName.trim()) {
             changesList.push({ field: 'Guardian Name', oldVal: initialFormState.guardianName, newVal: guardianName.trim() });
+          }
+          if (initialFormState.relationshipType !== relationshipType) {
+            changesList.push({ field: 'Relationship Type', oldVal: initialFormState.relationshipType, newVal: relationshipType });
           }
           if (initialFormState.phone !== phone.trim()) {
             changesList.push({ field: 'Contact Phone', oldVal: initialFormState.phone, newVal: phone.trim() });
@@ -896,16 +909,34 @@ const StudentsPage = ({ user, onSignOut }) => {
                 </div>
 
                 <div className="modal-section-title">Guardian & Contact</div>
-                <AsyncSelect
-                  label="Search & Select Registered Guardian"
-                  placeholder="Type guardian name..."
-                  fetchOptions={fetchGuardians}
-                  value={guardianName}
-                  onChange={(opt) => handleGuardianSelect(opt)}
-                  getOptionLabel={(opt) => opt.label}
-                  getOptionValue={(opt) => opt.id}
-                  error={formErrors.guardianName}
-                />
+                <div className="modal-row-2col">
+                  <AsyncSelect
+                    label="Search & Select Registered Guardian"
+                    placeholder="Type guardian name..."
+                    fetchOptions={fetchGuardians}
+                    value={guardianName}
+                    onChange={(opt) => handleGuardianSelect(opt)}
+                    getOptionLabel={(opt) => opt.label}
+                    getOptionValue={(opt) => opt.id}
+                    error={formErrors.guardianName}
+                  />
+
+                  <div className="select-input-wrapper">
+                    <label htmlFor="relationshipType" className="ui-input-label">Relationship Type</label>
+                    <select
+                      id="relationshipType"
+                      className="select-input"
+                      value={relationshipType}
+                      onChange={(e) => setRelationshipType(e.target.value)}
+                    >
+                      <option value="Parent">Parent</option>
+                      <option value="Father">Father</option>
+                      <option value="Mother">Mother</option>
+                      <option value="Guardian">Guardian</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                </div>
 
                 <div className="modal-row-2col">
                   <Input

@@ -161,28 +161,28 @@ const FinancePage = ({ user, onSignOut }) => {
       return [];
     }
 
-    return rawStudents.map((s, idx) => {
-      const gUser = s.guardians && s.guardians[0] && s.guardians[0].user;
-      const guardianStr = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || 'No Guardian Linked');
-      const studentName = s.first_name ? `${s.first_name} ${s.last_name}` : (s.name || `Student #${s.student_id || s.id}`);
-      
-      const sFee = (s.fee_structures && s.fee_structures.length > 0) ? s.fee_structures[0] : s.fee_structure;
-      const assignedTier = sFee 
-        ? sFee 
-        : (feeStructures[idx % feeStructures.length] || feeStructures[0]);
+    return rawStudents
+      .map((s) => {
+        const gUser = s.guardians && s.guardians[0] && s.guardians[0].user;
+        const guardianStr = gUser ? `${gUser.first_name} ${gUser.last_name}` : (s.guardianName || 'No Guardian Linked');
+        const studentName = s.first_name ? `${s.first_name} ${s.last_name}` : (s.name || `Student #${s.student_id || s.id}`);
+        
+        const sFee = (s.fee_structures && s.fee_structures.length > 0) ? s.fee_structures[0] : s.fee_structure;
+        if (!sFee) return null;
 
-      return {
-        student_id: s.student_id || s.id,
-        student_name: studentName,
-        grade: s.grade_level || 'Student',
-        guardian_name: guardianStr,
-        fee_name: assignedTier ? (assignedTier.fee_name || assignedTier.name) : 'Standard Route (Monthly)',
-        base_amount: assignedTier ? (assignedTier.base_amount || '150.00') : '150.00',
-        color: assignedTier ? (assignedTier.color || 'var(--primary-brand)') : 'var(--primary-brand)',
-        fee_structure_id: assignedTier ? (assignedTier.fee_structure_id || assignedTier.id) : 1
-      };
-    });
-  }, [rawStudents, feeStructures]);
+        return {
+          student_id: s.student_id || s.id,
+          student_name: studentName,
+          grade: s.grade_level || 'Student',
+          guardian_name: guardianStr,
+          fee_name: sFee.fee_name || sFee.name || 'Standard Route (Monthly)',
+          base_amount: sFee.base_amount || '150.00',
+          color: sFee.color || 'var(--primary-brand)',
+          fee_structure_id: sFee.fee_structure_id || sFee.id
+        };
+      })
+      .filter(Boolean);
+  }, [rawStudents]);
 
   // Computed Invoices / Payments Ledger
   const ledger = useMemo(() => {
@@ -551,7 +551,7 @@ const FinancePage = ({ user, onSignOut }) => {
                   <UserCheck size={18} />
                   Assigned Student Fees
                   <span style={{ fontSize: '11px', fontWeight: '600', backgroundColor: '#eff6ff', color: 'var(--primary-brand)', padding: '2px 8px', borderRadius: '12px' }}>
-                    {studentsMeta.total ?? assignedStudentFees.length} Students Assigned
+                    {assignedStudentFees.length} Students Assigned
                   </span>
                 </h3>
                 <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0 0' }}>
@@ -626,70 +626,78 @@ const FinancePage = ({ user, onSignOut }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {assignedStudentFees.map((row) => (
-                    <tr key={row.student_id}>
-                      <td style={{ padding: '14px 20px', fontWeight: '600', color: '#0f172a', fontSize: '13px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <GraduationCap size={16} style={{ color: 'var(--primary-brand)', flexShrink: 0 }} />
-                          <div>
-                            <div>{row.student_name}</div>
-                            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 'normal' }}>{row.grade}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '14px 20px', fontWeight: '500', fontSize: '13px', color: '#334155' }}>
-                        {row.guardian_name}
-                      </td>
-                      <td style={{ padding: '14px 20px', fontSize: '13px' }}>
-                        <span style={{ 
-                          display: 'inline-flex', 
-                          alignItems: 'center', 
-                          gap: '6px',
-                          padding: '4px 10px', 
-                          borderRadius: '12px', 
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          backgroundColor: '#f1f5f9',
-                          color: '#1e293b'
-                        }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.color }} />
-                          {row.fee_name}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: '700', fontSize: '13px', color: '#0f172a' }}>
-                        ${row.base_amount}
-                      </td>
-                      <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-
-                          <button
-                            type="button"
-                            className="action-btn"
-                            style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            onClick={() => {
-                              setSelectedStudentId({ id: row.student_id, label: row.student_name, sub: row.grade });
-                              setSelectedFeeId(String(row.fee_structure_id));
-                              setIsAssignModalOpen(true);
-                            }}
-                            title="Change or Edit Fee Structure for this Student"
-                          >
-                            <Edit3 size={11} /> Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            className="action-btn"
-                            style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', borderColor: '#fca5a5' }}
-                            onClick={() => handleUnassignFee(row.student_id, row.student_name)}
-                            disabled={unassignFeeMutation.isPending}
-                            title="Remove Fee Structure assignment from this Student"
-                          >
-                            <Trash2 size={11} /> Remove
-                          </button>
-                        </div>
+                  {assignedStudentFees.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#64748b', fontSize: '13px' }}>
+                        No assigned student fee structures found.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    assignedStudentFees.map((row) => (
+                      <tr key={row.student_id}>
+                        <td style={{ padding: '14px 20px', fontWeight: '600', color: '#0f172a', fontSize: '13px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <GraduationCap size={16} style={{ color: 'var(--primary-brand)', flexShrink: 0 }} />
+                            <div>
+                              <div>{row.student_name}</div>
+                              <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 'normal' }}>{row.grade}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 20px', fontWeight: '500', fontSize: '13px', color: '#334155' }}>
+                          {row.guardian_name}
+                        </td>
+                        <td style={{ padding: '14px 20px', fontSize: '13px' }}>
+                          <span style={{ 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            padding: '4px 10px', 
+                            borderRadius: '12px', 
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            backgroundColor: '#f1f5f9',
+                            color: '#1e293b'
+                          }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: row.color }} />
+                            {row.fee_name}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 20px', textAlign: 'right', fontWeight: '700', fontSize: '13px', color: '#0f172a' }}>
+                          ${row.base_amount}
+                        </td>
+                        <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+
+                            <button
+                              type="button"
+                              className="action-btn"
+                              style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              onClick={() => {
+                                setSelectedStudentId({ id: row.student_id, label: row.student_name, sub: row.grade });
+                                setSelectedFeeId(String(row.fee_structure_id));
+                                setIsAssignModalOpen(true);
+                              }}
+                              title="Change or Edit Fee Structure for this Student"
+                            >
+                              <Edit3 size={11} /> Edit
+                            </button>
+
+                            <button
+                              type="button"
+                              className="action-btn"
+                              style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#dc2626', borderColor: '#fca5a5' }}
+                              onClick={() => handleUnassignFee(row.student_id, row.student_name)}
+                              disabled={unassignFeeMutation.isPending}
+                              title="Remove Fee Structure assignment from this Student"
+                            >
+                              <Trash2 size={11} /> Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
