@@ -194,6 +194,22 @@ const FinancePage = ({ user, onSignOut }) => {
         const rawId = inv.invoice_id ?? inv.id;
 
         const guardianId = inv.guardian?.guardian_id || inv.guardian_id || inv.guardian?.id;
+        const gStudents = inv.guardian?.students || [];
+
+        let studentNamesList = [];
+        if (gStudents.length > 0) {
+          studentNamesList = gStudents.map(s => `${s.first_name || ''} ${s.last_name || ''}`.trim()).filter(Boolean);
+        }
+
+        if (studentNamesList.length === 0 && guardianId && rawStudents?.length > 0) {
+          studentNamesList = rawStudents
+            .filter((s) => s.guardians?.some((g) => String(g.guardian_id || g.id) === String(guardianId)))
+            .map((s) => `${s.first_name || ''} ${s.last_name || ''}`.trim())
+            .filter(Boolean);
+        }
+
+        const studentName = [...new Set(studentNamesList)].join(', ') || '—';
+
         let feeTier = '';
         if (guardianId && rawStudents?.length > 0) {
           const names = rawStudents
@@ -218,6 +234,7 @@ const FinancePage = ({ user, onSignOut }) => {
           raw_id: rawId,
           invoice_id: `#INV-${rawId}`,
           payer: payerName,
+          student_name: studentName,
           fee_tier: feeTier,
           date: inv.invoice_date ? String(inv.invoice_date).split('T')[0] : 'Oct 24, 2023',
           amount: formattedAmount,
@@ -818,7 +835,8 @@ const FinancePage = ({ user, onSignOut }) => {
                   <thead>
                     <tr>
                       <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Invoice ID</th>
-                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Payer</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Payer (Guardian)</th>
+                      <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Student</th>
                       <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Fee Tier</th>
                       <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Date</th>
                       <th style={{ padding: '14px 16px', fontSize: '11px', whiteSpace: 'nowrap' }}>Amount</th>
@@ -829,7 +847,7 @@ const FinancePage = ({ user, onSignOut }) => {
                   <tbody>
                     {isInvoicesLoading ? (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: 'var(--primary-brand)' }}>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: 'var(--primary-brand)' }}>
                           Loading payments ledger...
                         </td>
                       </tr>
@@ -841,6 +859,9 @@ const FinancePage = ({ user, onSignOut }) => {
                           </td>
                           <td style={{ padding: '14px 16px', fontWeight: '500', fontSize: '13px', color: '#334155', whiteSpace: 'nowrap' }}>
                             {row.payer}
+                          </td>
+                          <td style={{ padding: '14px 16px', fontWeight: '500', fontSize: '13px', color: '#0f172a', whiteSpace: 'nowrap' }}>
+                            {row.student_name}
                           </td>
                           <td style={{ padding: '14px 16px', fontSize: '12px', color: '#1e293b', whiteSpace: 'nowrap' }}>
                             {row.fee_tier ? (
@@ -924,7 +945,7 @@ const FinancePage = ({ user, onSignOut }) => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: 'var(--icon-color)' }}>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: 'var(--icon-color)' }}>
                           No invoice records found.
                         </td>
                       </tr>
