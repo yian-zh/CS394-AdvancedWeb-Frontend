@@ -7,15 +7,19 @@ import { authService } from './features/auth/services/authService';
 
 const lazyWithRetry = (componentImport) =>
   lazy(async () => {
-    const pageHasBeenReloaded = sessionStorage.getItem('chunk_reload_attempted');
+    const lastReload = sessionStorage.getItem('chunk_reload_timestamp');
+    const now = Date.now();
+
     try {
       const component = await componentImport();
-      sessionStorage.removeItem('chunk_reload_attempted');
+      sessionStorage.removeItem('chunk_reload_timestamp');
       return component;
     } catch (error) {
-      if (!pageHasBeenReloaded) {
-        sessionStorage.setItem('chunk_reload_attempted', 'true');
+      // Automatic recovery for 404 dynamic import chunk failures after new deployment builds
+      if (!lastReload || now - parseInt(lastReload, 10) > 10000) {
+        sessionStorage.setItem('chunk_reload_timestamp', String(now));
         window.location.reload();
+        return new Promise(() => {});
       }
       throw error;
     }
