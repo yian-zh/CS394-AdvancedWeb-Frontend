@@ -590,44 +590,6 @@ const StudentsPage = ({ user, onSignOut }) => {
 
           {/* Filters and Actions Row */}
           <div className="filters-row">
-            <div className="filter-tabs">
-              <button 
-                type="button" 
-                className={`filter-tab ${gradeFilter === 'All' ? 'is-active' : ''}`}
-                onClick={() => { setGradeFilter('All'); setCurrentPage(1); }}
-              >
-                All Grades
-              </button>
-              <button 
-                type="button" 
-                className={`filter-tab ${gradeFilter === 'Grade 1' ? 'is-active' : ''}`}
-                onClick={() => { setGradeFilter('Grade 1'); setCurrentPage(1); }}
-              >
-                Grade 1
-              </button>
-              <button 
-                type="button" 
-                className={`filter-tab ${gradeFilter === 'Grade 5' ? 'is-active' : ''}`}
-                onClick={() => { setGradeFilter('Grade 5'); setCurrentPage(1); }}
-              >
-                Grade 5
-              </button>
-              <button 
-                type="button" 
-                className={`filter-tab ${gradeFilter === 'Grade 9' ? 'is-active' : ''}`}
-                onClick={() => { setGradeFilter('Grade 9'); setCurrentPage(1); }}
-              >
-                Grade 9
-              </button>
-              <button 
-                type="button" 
-                className={`filter-tab ${gradeFilter === 'Grade 12' ? 'is-active' : ''}`}
-                onClick={() => { setGradeFilter('Grade 12'); setCurrentPage(1); }}
-              >
-                Grade 12
-              </button>
-            </div>
-
             <div className="filters-actions">
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 {/* Grade filter selector covering Grades 1 to 12 */}
