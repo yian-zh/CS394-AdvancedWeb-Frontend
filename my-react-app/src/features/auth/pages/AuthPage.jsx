@@ -2,14 +2,13 @@ import { useState } from 'react';
 import { Bus, CheckCircle2 } from 'lucide-react';
 import Card from '../../../components/ui/Card';
 import LoginForm from '../components/LoginForm';
-import RegisterForm from '../components/RegisterForm';
 import ForgotPasswordForm from '../components/ForgotPasswordForm';
 import ResetPasswordForm from '../components/ResetPasswordForm';
 import '../styles/auth.css';
 
 const AuthPage = ({ onLogin }) => {
-  const [activeTab, setActiveTab] = useState('signin'); // 'signin', 'signup', 'forgot', 'reset'
-  const [authSuccess, setAuthSuccess] = useState(null); // { type: 'register' | 'reset', email: string }
+  const [activeTab, setActiveTab] = useState('signin'); // 'signin', 'forgot', 'reset'
+  const [authSuccess, setAuthSuccess] = useState(null); // { type: 'reset', email: string }
   const [resetEmail, setResetEmail] = useState('');
   const [resetToken, setResetToken] = useState('');
 
@@ -17,13 +16,6 @@ const AuthPage = ({ onLogin }) => {
     if (onLogin) {
       onLogin(data.user);
     }
-  };
-
-  const handleRegisterSuccess = (data) => {
-    setAuthSuccess({
-      type: 'register',
-      email: data.email,
-    });
   };
 
   const handleReset = () => {
@@ -77,39 +69,12 @@ const AuthPage = ({ onLogin }) => {
             </div>
           ) : (
             <>
-              {/* Tab Navigation */}
-              {(activeTab === 'signin' || activeTab === 'signup') && (
-                <div className="auth-tabs" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'signin'}
-                    className={`auth-tab-btn ${activeTab === 'signin' ? 'is-active' : ''}`}
-                    onClick={() => setActiveTab('signin')}
-                  >
-                    Sign In
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={activeTab === 'signup'}
-                    className={`auth-tab-btn ${activeTab === 'signup' ? 'is-active' : ''}`}
-                    onClick={() => setActiveTab('signup')}
-                  >
-                    Register
-                  </button>
-                </div>
-              )}
-
               {/* Form Body Toggle */}
               {activeTab === 'signin' && (
                 <LoginForm 
                   onSuccess={handleLoginSuccess} 
                   onForgotPassword={() => setActiveTab('forgot')}
                 />
-              )}
-              {activeTab === 'signup' && (
-                <RegisterForm onSuccess={handleRegisterSuccess} />
               )}
               {activeTab === 'forgot' && (
                 <ForgotPasswordForm 
