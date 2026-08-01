@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Bus, Users, LogOut, Search, Plus, 
-  SlidersHorizontal, Download, X, 
+  SlidersHorizontal, X, 
   GraduationCap, Trash2, Edit3, UserCheck, AlertTriangle, MapPin, CheckCircle2, DollarSign, Activity, Ban, Loader2
 } from 'lucide-react';
 import Button from '../../../components/ui/Button';
@@ -13,7 +13,7 @@ import AsyncSelect from '../../../components/ui/AsyncSelect';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent, useToggleStudentStatus, useAssignGuardian } from '../hooks/useStudents';
 import { dashboardService } from '../services/dashboardService';
-import { useRoutes } from '../hooks/useRoutes';
+
 import '../styles/dashboard.css';
 
 // Initial stats for Bento grid (static text as in Figma but dynamic total count)
@@ -32,7 +32,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   const debouncedSearch = useDebounce(searchQuery, 300);
 
   const [gradeFilter, setGradeFilter] = useState('All');
-  const [routeFilter, setRouteFilter] = useState('All');
+  const routeFilter = 'All';
   const [statusFilter, setStatusFilter] = useState('All');
 
   const { data: studentsResponse, isLoading, isFetching, error } = useStudents({ 
@@ -50,8 +50,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   };
   const summaryStats = studentsResponse?.summary_stats;
 
-  const { data: routesResponse } = useRoutes({ perPage: 200 });
-  const rawRoutes = routesResponse?.data ?? [];
+
   const [guardianUserId, setGuardianUserId] = useState(null);
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
@@ -605,25 +604,6 @@ const StudentsPage = ({ user, onSignOut }) => {
                   ))}
                 </select>
 
-                {/* Route filter selector */}
-                <select 
-                  className="select-input" 
-                  style={{ padding: '6px 28px 6px 12px', fontSize: '13px', width: '160px', height: '36px', backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%235c5f62\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'%3e%3c/polyline%3e%3c/svg%3e")', backgroundPosition: 'right 8px center', backgroundSize: '12px' }}
-                  value={routeFilter}
-                  onChange={(e) => { setRouteFilter(e.target.value); setCurrentPage(1); }}
-                >
-                  <option value="All">All Routes</option>
-                  <option value="Unassigned">Unassigned</option>
-                  {rawRoutes.map((r) => {
-                    const routeName = r.route_name || r.name || `Route #${r.route_id || r.id}`;
-                    return (
-                      <option key={r.route_id || r.id} value={routeName}>
-                        {routeName}
-                      </option>
-                    );
-                  })}
-                </select>
-
                 <select 
                   className="select-input" 
                   style={{ padding: '6px 28px 6px 12px', fontSize: '13px', width: '140px', height: '36px' }}
@@ -634,11 +614,6 @@ const StudentsPage = ({ user, onSignOut }) => {
                   <option value="Enrolled">Enrolled</option>
                   <option value="Suspended">Suspended</option>
                 </select>
-
-                <button type="button" className="action-btn" onClick={() => alert('Exporting student directory CSV...')}>
-                  <Download size={14} />
-                  Export
-                </button>
               </div>
             </div>
           </div>
