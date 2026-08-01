@@ -51,6 +51,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   const summaryStats = studentsResponse?.summary_stats;
 
 
+  const [guardianId, setGuardianId] = useState(null);
   const [guardianUserId, setGuardianUserId] = useState(null);
   const createStudentMutation = useCreateStudent();
   const updateStudentMutation = useUpdateStudent();
@@ -66,12 +67,19 @@ const StudentsPage = ({ user, onSignOut }) => {
     return rawStudents.map(s => {
       const primaryGuardian = s.guardians && s.guardians[0];
       const guardianUser = primaryGuardian && primaryGuardian.user;
-      const guardianNameStr = guardianUser ? `${guardianUser.first_name} ${guardianUser.last_name}` : 'No Guardian';
+      const guardianNameStr = guardianUser 
+        ? `${guardianUser.first_name || ''} ${guardianUser.last_name || ''}`.trim() 
+        : (s.guardian_name || 'No Guardian');
       const guardianPhoneStr = guardianUser ? guardianUser.phone_number : 'N/A';
-      const guardianId = primaryGuardian
-        ? (primaryGuardian.guardian_id || primaryGuardian.id || guardianUser?.user_id || guardianUser?.id || null)
-        : null;
       
+      const gId = primaryGuardian
+        ? (primaryGuardian.guardian_id || primaryGuardian.id || primaryGuardian.pivot?.guardian_id || primaryGuardian.guardian?.guardian_id || primaryGuardian.guardian?.id || null)
+        : null;
+
+      const uId = primaryGuardian
+        ? (primaryGuardian.user_id || guardianUser?.user_id || guardianUser?.id || primaryGuardian.pivot?.user_id || null)
+        : null;
+
       // Route details: Pick the latest assigned route stop
       const latestStop = (s.stops && s.stops.length > 0)
         ? [...s.stops].sort((a, b) => (b.pivot?.student_stop_id || b.route_id || 0) - (a.pivot?.student_stop_id || a.route_id || 0))[0]
@@ -87,7 +95,8 @@ const StudentsPage = ({ user, onSignOut }) => {
         id: String(s.student_id),
         name: `${s.first_name} ${s.last_name}`,
         guardianName: guardianNameStr,
-        guardianId,
+        guardianId: gId || uId,
+        guardianUserId: uId || gId,
         relationshipType: relationshipTypeStr,
         grade: s.grade_level || 'Grade 10',
         assignedRoute: assignedRouteStr,
@@ -103,7 +112,7 @@ const StudentsPage = ({ user, onSignOut }) => {
     const data = await dashboardService.getUsers({ search, role: 'guardian', perPage: 20 });
     const userList = data?.data ?? (Array.isArray(data) ? data : []);
     return userList.map(u => {
-      const gId = u.guardian_id || u.user_id || u.id;
+      const gId = u.guardian?.guardian_id || u.guardian?.id || u.guardian_id || u.user_id || u.id;
       const uId = u.user_id || u.id;
       const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
       return {
@@ -122,12 +131,16 @@ const StudentsPage = ({ user, onSignOut }) => {
     if (!selectedGuardian) {
       setGuardianName('');
       setPhone('');
+      setGuardianId(null);
       setGuardianUserId(null);
       return;
     }
     const name = typeof selectedGuardian === 'string' ? selectedGuardian : selectedGuardian.name || selectedGuardian.label;
     setGuardianName(name);
-    setGuardianUserId(selectedGuardian?.guardian_id || selectedGuardian?.user_id || selectedGuardian?.id || null);
+    const gId = selectedGuardian?.guardian_id || selectedGuardian?.id;
+    const uId = selectedGuardian?.user_id || selectedGuardian?.id;
+    setGuardianId(gId ? parseInt(gId, 10) : null);
+    setGuardianUserId(uId ? parseInt(uId, 10) : null);
     if (selectedGuardian?.phone && selectedGuardian.phone !== 'N/A') {
       setPhone(selectedGuardian.phone);
     }
@@ -219,6 +232,7 @@ const StudentsPage = ({ user, onSignOut }) => {
   const filteredStudents = students;
 
   // Modal Openers
+  // Modal Openers
   const openAddModal = () => {
     setModalMode('add');
     setSelectedStudentId(null);
@@ -230,6 +244,7 @@ const StudentsPage = ({ user, onSignOut }) => {
     setAssignedRoute('Unassigned');
     setGender('Male');
     setPhone('');
+    setGuardianId(null);
     setGuardianUserId(null);
     setFormErrors({});
     setInitialFormState(null);
@@ -237,7 +252,8 @@ const StudentsPage = ({ user, onSignOut }) => {
   };
 
   const openEditModal = (student) => {
-    setGuardianUserId(student.guardianId ?? null);
+    setGuardianId(student.guardianId ?? null);
+    setGuardianUserId(student.guardianUserId ?? student.guardianId ?? null);
     setModalMode('edit');
     setSelectedStudentId(student.id);
     const names = student.name.split(' ');
@@ -297,6 +313,7 @@ const StudentsPage = ({ user, onSignOut }) => {
 
     setIsSubmitting(true);
     try {
+      const targetGuardianId = guardianId || guardianUserId;
       const studentData = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -307,19 +324,20 @@ const StudentsPage = ({ user, onSignOut }) => {
         pickup_add: 'Pickup Address',
         dropoff_add: 'Dropoff Address',
         guardian_name: guardianName.trim(),
-        guardian_user_id: guardianUserId,
+        guardian_id: targetGuardianId ? parseInt(targetGuardianId, 10) : undefined,
+        guardian_user_id: guardianUserId ? parseInt(guardianUserId, 10) : undefined,
       };
 
       if (modalMode === 'add') {
         const created = await createStudentMutation.mutateAsync(studentData);
         const newStudentId = created?.student_id ?? created?.data?.student_id ?? created?.id ?? created?.data?.id;
-        if (guardianUserId && newStudentId) {
+        if (targetGuardianId && newStudentId) {
           try {
             await assignGuardianMutation.mutateAsync({
               student_id: parseInt(newStudentId, 10),
-              guardian_id: parseInt(guardianUserId, 10),
-              guardian_user_id: parseInt(guardianUserId, 10),
-              user_id: parseInt(guardianUserId, 10),
+              guardian_id: parseInt(targetGuardianId, 10),
+              guardian_user_id: guardianUserId ? parseInt(guardianUserId, 10) : parseInt(targetGuardianId, 10),
+              user_id: guardianUserId ? parseInt(guardianUserId, 10) : parseInt(targetGuardianId, 10),
               relationship_type: relationshipType || 'Parent',
             });
           } catch (assignErr) {
@@ -339,13 +357,13 @@ const StudentsPage = ({ user, onSignOut }) => {
       } else {
         await updateStudentMutation.mutateAsync({ id: selectedStudentId, studentData });
 
-        if (guardianUserId) {
+        if (targetGuardianId) {
           try {
             await assignGuardianMutation.mutateAsync({
               student_id: parseInt(selectedStudentId, 10),
-              guardian_id: parseInt(guardianUserId, 10),
-              guardian_user_id: parseInt(guardianUserId, 10),
-              user_id: parseInt(guardianUserId, 10),
+              guardian_id: parseInt(targetGuardianId, 10),
+              guardian_user_id: guardianUserId ? parseInt(guardianUserId, 10) : parseInt(targetGuardianId, 10),
+              user_id: guardianUserId ? parseInt(guardianUserId, 10) : parseInt(targetGuardianId, 10),
               relationship_type: relationshipType || 'Parent',
             });
           } catch (assignErr) {
