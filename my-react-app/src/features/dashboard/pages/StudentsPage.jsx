@@ -100,14 +100,22 @@ const StudentsPage = ({ user, onSignOut }) => {
   }, [rawStudents]);
 
   const fetchGuardians = useCallback(async (search) => {
-    const data = await dashboardService.getUsers({ search, perPage: 20 });
-    return (data?.data ?? []).map(u => ({
-      id: u.user_id || u.id,
-      label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
-      sub: u.phone_number ? `Contact: ${u.phone_number}` : '',
-      phone: u.phone_number || '',
-      name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username,
-    }));
+    const data = await dashboardService.getUsers({ search, role: 'guardian', perPage: 20 });
+    const userList = data?.data ?? (Array.isArray(data) ? data : []);
+    return userList.map(u => {
+      const gId = u.guardian_id || u.user_id || u.id;
+      const uId = u.user_id || u.id;
+      const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username;
+      return {
+        id: gId,
+        guardian_id: gId,
+        user_id: uId,
+        label: name,
+        sub: u.phone_number ? `Contact: ${u.phone_number}` : '',
+        phone: u.phone_number || '',
+        name: name,
+      };
+    });
   }, []);
 
   const handleGuardianSelect = (selectedGuardian) => {
@@ -119,7 +127,7 @@ const StudentsPage = ({ user, onSignOut }) => {
     }
     const name = typeof selectedGuardian === 'string' ? selectedGuardian : selectedGuardian.name || selectedGuardian.label;
     setGuardianName(name);
-    setGuardianUserId(selectedGuardian?.user_id || selectedGuardian?.id || null);
+    setGuardianUserId(selectedGuardian?.guardian_id || selectedGuardian?.user_id || selectedGuardian?.id || null);
     if (selectedGuardian?.phone && selectedGuardian.phone !== 'N/A') {
       setPhone(selectedGuardian.phone);
     }
@@ -306,11 +314,17 @@ const StudentsPage = ({ user, onSignOut }) => {
         const created = await createStudentMutation.mutateAsync(studentData);
         const newStudentId = created?.student_id ?? created?.data?.student_id ?? created?.id ?? created?.data?.id;
         if (guardianUserId && newStudentId) {
-          await assignGuardianMutation.mutateAsync({
-            student_id: parseInt(newStudentId, 10),
-            guardian_id: parseInt(guardianUserId, 10),
-            relationship_type: relationshipType || 'Parent',
-          });
+          try {
+            await assignGuardianMutation.mutateAsync({
+              student_id: parseInt(newStudentId, 10),
+              guardian_id: parseInt(guardianUserId, 10),
+              guardian_user_id: parseInt(guardianUserId, 10),
+              user_id: parseInt(guardianUserId, 10),
+              relationship_type: relationshipType || 'Parent',
+            });
+          } catch (assignErr) {
+            console.warn('Assign guardian API warning:', assignErr);
+          }
         }
         setNotificationBanner({
           type: 'success',
@@ -326,11 +340,17 @@ const StudentsPage = ({ user, onSignOut }) => {
         await updateStudentMutation.mutateAsync({ id: selectedStudentId, studentData });
 
         if (guardianUserId) {
-          await assignGuardianMutation.mutateAsync({
-            student_id: parseInt(selectedStudentId, 10),
-            guardian_id: parseInt(guardianUserId, 10),
-            relationship_type: relationshipType || 'Parent',
-          });
+          try {
+            await assignGuardianMutation.mutateAsync({
+              student_id: parseInt(selectedStudentId, 10),
+              guardian_id: parseInt(guardianUserId, 10),
+              guardian_user_id: parseInt(guardianUserId, 10),
+              user_id: parseInt(guardianUserId, 10),
+              relationship_type: relationshipType || 'Parent',
+            });
+          } catch (assignErr) {
+            console.warn('Assign guardian API warning:', assignErr);
+          }
         }
 
         // Calculate exact diffs between initial form state and submitted values
